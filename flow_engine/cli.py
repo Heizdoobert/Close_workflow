@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import sys
 
-from flow_engine import __version__, agents, bridge, engine, gate, plan
+from flow_engine import __version__, agents, bridge, engine, gate, plan, sandbox
 from flow_engine.resp import RedisError
 
 USAGE = ('usage: flow-task "<task message>"      store a task (with FLOW_EXEC=1 also run it)\n'
@@ -32,6 +32,8 @@ def doctor():
     up = engine.listener_running()
     add("listener", up, "running" if up else "stopped (flow-task listen, or install.py --service)", required=False)
     add("claude", bool(agents.claude_bin()), agents.claude_bin() or "not found (set FLOW_CLAUDE)")
+    sb = sandbox.available()
+    add("sandbox", sb is not None, sb or "none: sub-agent writes only checked after each step", required=False)
     add("gitleaks", bool(shutil.which("gitleaks")), "found" if shutil.which("gitleaks") else "optional: secrets gate skipped", required=False)
     exe = bridge.agent_system()
     add("agent-system", bool(exe), exe or "not found: memory recall/learn disabled", required=False)
