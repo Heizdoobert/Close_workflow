@@ -108,6 +108,10 @@ def main(argv=None):
         if cmd == "report" and rest:
             print(plan.report(rest[0]).read_text(encoding="utf-8"))
             return 0
+        if cmd == "recover":
+            lines = plan.recover()
+            print("\n".join(lines) if lines else "nothing to recover")
+            return 0
         if cmd == "plans":
             for sf in sorted(plan.plans_dir().glob("*/state.json")):
                 st = json.loads(sf.read_text(encoding="utf-8"))
