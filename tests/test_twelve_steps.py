@@ -178,3 +178,26 @@ def test_a_plan_without_analysis_still_runs_and_the_report_says_what_was_not_che
     assert plan.approve(pid, wait_for=True) == "done"
     rep = _read(env, pid, "report.md")
     assert "không có khối analysis" in rep and "plan không có khối analysis" in rep
+
+
+# --- plans/ on a filesystem that cannot keep file modes (real run: repo on ext4, FLOW_SKILL on NTFS through FUSE) -------
+
+def test_nomode_makes_git_ignore_mode_changes_only_when_the_filesystem_loses_them(env, monkeypatch, tmp_path):
+    for k in ("GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"):
+        monkeypatch.delenv(k, raising=False)
+        monkeypatch.setenv(k, "0")  # so the test's own changes are undone afterwards
+    monkeypatch.delenv("GIT_CONFIG_COUNT")
+    monkeypatch.setattr(plan, "_mode_lost", lambda p: False)
+    plan._nomode()
+    assert "GIT_CONFIG_COUNT" not in plan.os.environ
+    monkeypatch.setattr(plan, "_mode_lost", lambda p: True)
+    plan._nomode()
+    _git(tmp_path, "init", "-q")
+    (tmp_path / "a.txt").write_text("x\n")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "i")
+    (tmp_path / "a.txt").chmod(0o755)  # what the lossy filesystem does to every file
+    assert subprocess.run(["git", "status", "--porcelain"], cwd=tmp_path, capture_output=True, text=True).stdout == ""
+    assert plan.os.environ["GIT_CONFIG_COUNT"] == "1"
+    plan._nomode()  # idempotent per process: a second call must not stack another entry
+    assert plan.os.environ["GIT_CONFIG_COUNT"] == "1"

@@ -77,6 +77,25 @@ def repo():
     return top
 
 
+def _mode_lost(path):
+    """True when the filesystem under `path` shows every file as executable (NTFS/FAT/exFAT through FUSE): git then sees a mode change in every worktree file."""
+    import tempfile
+    path.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path) as f:
+        os.chmod(f.name, 0o644)
+        return bool(os.stat(f.name).st_mode & 0o111)
+
+
+def _nomode():
+    """Worktrees live under plans/, which can be on another filesystem than the repo. If that one cannot keep file modes, every checked-out file reads as `old mode 100644 new mode 100755`: the plan
+    worktree turns dirty, `git merge` refuses and every step fails. Real run: repo on ext4, FLOW_SKILL on NTFS. The env var reaches every git call here, the gates and the agents. Cost: a mode change
+    (chmod +x) made by a step is not committed on such a filesystem, which could not keep it anyway."""
+    n = int(os.environ.get("GIT_CONFIG_COUNT", "0"))
+    if any(os.environ.get(f"GIT_CONFIG_KEY_{i}") == "core.fileMode" for i in range(n)) or not _mode_lost(plans_dir()):
+        return
+    os.environ.update({"GIT_CONFIG_COUNT": str(n + 1), f"GIT_CONFIG_KEY_{n}": "core.fileMode", f"GIT_CONFIG_VALUE_{n}": "false"})
+
+
 def git(cwd, *a, check=True):
     p = subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if check and p.returncode:
@@ -717,6 +736,7 @@ def _launchable(ctx, running_files):
 
 
 def run(pid):
+    _nomode()
     d, plan, state = load(pid)
     if state.get("plan_hash") and _hash(plan) != state["plan_hash"]:  # approval froze this plan: an edited plan.json must not run (or resume)
         state.update(status="failed", error="plan.json changed after approval: not running it. Re-plan and approve again", finished=engine.now())
