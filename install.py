@@ -5,6 +5,7 @@
   python install.py --service             also start the listener at login (systemd --user / launchd / Task Scheduler)
   python install.py --no-docker           skip containers (point REDIS_HOST/.env at your own Redis)
   python install.py --agent-system PATH   Agent_system source dir or pip URL (default: ../Agent_system, else cloned into vendor/)
+  python install.py --full                everything an agent needs, no manual step: also the task:[...] rules blocks, Claude Code MCP (user scope), persistent PATH on Windows
 """
 import argparse
 import os
@@ -112,8 +113,26 @@ def start_docker(env, central):
     say("containers up: Redis" + (" + Loki/Promtail/Grafana (http://localhost:3000)" if central else ""))
 
 
-def link_shims():
-    """Put flow-task and agent-system on PATH. POSIX: symlinks in ~/.local/bin. Windows: print the PATH hint."""
+def persist_win_path(d):
+    """Append d to the user's PATH in the registry (new shells see it). True when added or already there."""
+    import winreg
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_READ | winreg.KEY_WRITE) as k:
+        try:
+            cur, kind = winreg.QueryValueEx(k, "Path")
+        except FileNotFoundError:
+            cur, kind = "", winreg.REG_EXPAND_SZ
+        if str(d).lower() in [p.strip().lower() for p in cur.split(";")]:
+            return True
+        winreg.SetValueEx(k, "Path", 0, kind, (cur.rstrip(";") + ";" if cur else "") + str(d))
+    return True
+
+
+def link_shims(full=False):
+    """Put flow-task and agent-system on PATH. POSIX: symlinks in ~/.local/bin. Windows: persist it with --full, else print the hint."""
+    if WIN and full:
+        persist_win_path(BIN)
+        say(f"{BIN} added to your user PATH: open a new terminal")
+        return
     if WIN:
         say(f"add to PATH (PowerShell): [Environment]::SetEnvironmentVariable('Path', $env:Path + ';{BIN}', 'User')")
         return
@@ -139,6 +158,24 @@ def register_mcp():
     if exe.exists():
         run([exe, "install", "--target", "mcp"], check=False)  # MCP only: never rewrites your global rules files
         say("MCP server registered (restart Claude Desktop / Cursor / Antigravity). Claude Code: claude mcp add agent-system -- " + str(exe) + " mcp")
+
+
+def register_rules_and_claude_code(full):
+    """--full: write the task:[...] rules blocks (marked, the rest of each file untouched) and register the MCP server in Claude Code at user scope."""
+    if not full:
+        return
+    exe = BIN / ("agent-system.exe" if WIN else "agent-system")
+    if exe.exists():
+        run([exe, "install", "--target", "rules"], check=False)
+        oc = Path.home() / ".config" / "opencode"  # OpenCode is not in agent-system's rules targets: same marked block, written from the venv
+        if oc.is_dir():
+            py("-c", f"from pathlib import Path; from agent_system.sdk.installer import UNIVERSAL_SYSTEM_INSTRUCTION as T, write_managed_block as w; w(Path({str(oc / 'AGENTS.md')!r}), T)")
+        claude = shutil.which("claude")
+        if not claude:
+            say("claude CLI not found: Claude Code MCP not registered (re-run --full after installing it)")
+        elif "agent-system" not in (run([claude, "mcp", "list"], capture_output=True, text=True).stdout or ""):
+            run([claude, "mcp", "add", "--scope", "user", "agent-system", "--", exe, "mcp"], check=False)
+            say("Claude Code MCP registered (user scope)")
 
 
 def install_skill(home=None):
@@ -192,6 +229,7 @@ def main():
     ap.add_argument("--no-docker", action="store_true")
     ap.add_argument("--no-central-log", action="store_true", help="Redis only, no Loki/Grafana")
     ap.add_argument("--service", action="store_true", help="start the listener at login")
+    ap.add_argument("--full", action="store_true", help="agent mode: also rules blocks, Claude Code MCP, persistent PATH on Windows (no manual step left)")
     a = ap.parse_args()
     if sys.version_info < (3, 9):
         sys.exit("Python 3.9+ required")
@@ -205,9 +243,10 @@ def main():
         start_docker(env, env.get("ENABLE_CENTRAL_LOG") == "1")
     for d in ("incoming_tasks/processed", "incoming_tasks/failed", "logs"):
         (ROOT / d).mkdir(parents=True, exist_ok=True)
-    link_shims()
+    link_shims(a.full)
     if src:
         register_mcp()
+        register_rules_and_claude_code(a.full)
     install_skill()
     if a.service:
         install_service()

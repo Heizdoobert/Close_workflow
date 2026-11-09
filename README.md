@@ -1,6 +1,6 @@
 # FLOW_SKILL: closed-loop task engine
 
-Drop a task, a cheap Claude worker runs it, state goes to Redis, logs go to Loki/Grafana, and [Agent_system](../Agent_system) gives it memory. Linux, macOS, Windows. **Install: [INSTALL.md](INSTALL.md).**
+Drop a task, a cheap Claude worker runs it, state goes to Redis, logs go to Loki/Grafana, and [Agent_system](../Agent_system) gives it memory. Linux, macOS, Windows. **Install: [INSTALL.md](INSTALL.md).** Agent? Read [AGENT_SETUP.md](AGENT_SETUP.md): it installs and wires everything with no manual step.
 
 ```
 flow-task enqueue "task text"  ->  Redis task:<id>  ->  listener  ->  claude -p (haiku, read-only, ~7k tokens)
