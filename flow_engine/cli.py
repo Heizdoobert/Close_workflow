@@ -17,7 +17,8 @@ USAGE = ('usage: flow-task "<task message>"      store a task (with FLOW_EXEC=1 
          "       flow-task show <plan> | approve <plan> [--wait] | retry <plan> | reject <plan> | report <plan> | run <plan> | plans")
 
 
-def doctor():
+def doctor_checks():
+    """The health checks as (name, ok, detail, required) tuples; doctor() prints them."""
     checks = []
 
     def add(name, ok, detail, required=True):
@@ -34,7 +35,8 @@ def doctor():
     add("claude", bool(agents.claude_bin()), agents.claude_bin() or "not found (set FLOW_CLAUDE)")
     sb = sandbox.available()
     add("sandbox", sb is not None, sb or "none: sub-agent writes only checked after each step", required=False)
-    add("gitleaks", bool(shutil.which("gitleaks")), "found" if shutil.which("gitleaks") else "optional: secrets gate skipped", required=False)
+    gl = shutil.which("gitleaks")
+    add("gitleaks", bool(gl), "found" if gl else "missing: secrets gate uses the built-in regex scan only", required=False)
     exe = bridge.agent_system()
     add("agent-system", bool(exe), exe or "not found: memory recall/learn disabled", required=False)
     if exe:
@@ -45,6 +47,11 @@ def doctor():
             add("agent doctor", rep["ok"], "ok" if rep["ok"] else "failing: " + ",".join(bad), required=False)
         except Exception:
             add("agent doctor", False, "no report", required=False)
+    return checks
+
+
+def doctor():
+    checks = doctor_checks()
     for name, ok, detail, req in checks:
         print(f"{'OK  ' if ok else ('FAIL' if req else 'warn')}  {name:<13} {detail}")
     return 0 if all(ok for _, ok, _, req in checks if req) else 1

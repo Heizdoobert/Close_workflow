@@ -1,6 +1,6 @@
-"""Scripted quality gates (0 LLM tokens). A missing optional tool means the gate is skipped, never failed.
+"""Scripted quality gates (0 LLM tokens). A missing optional tool means its gate falls back or skips, never a silent pass of a real finding.
 
-Gates: secrets (gitleaks), syntax of changed .py/.sh, tests (pytest if tests exist),
+Gates: secrets (gitleaks, else the built-in regex scan of the added lines), syntax of changed .py/.sh, tests (pytest if tests exist),
 constraints (no weakened bar in the git diff: suppressions, removed or deleted tests, lost asserts), critic (agent-system rules, opt-in FLOW_CRITIC=1).
 """
 
@@ -13,6 +13,7 @@ import sys
 import tempfile
 
 from flow_engine import bridge
+from flow_engine.secrets import scan_line, secret_file_name
 
 
 def _run(root, cmd, **kw):
@@ -73,6 +74,45 @@ def constraints(root="."):
             "deleted_tests": deleted, "files": files}
 
 
+def _changed_names(root):
+    """Every file the diff against HEAD touches, plus untracked files (NUL-separated, so odd names survive)."""
+    out = _run(root, ["git", "diff", "--name-only", "-z", "HEAD"]).stdout.split("\0")
+    out += _run(root, ["git", "ls-files", "-o", "--exclude-standard", "-z"]).stdout.split("\0")
+    return sorted({f for f in out if f})
+
+
+def _added_lines(root):
+    """(file, line number, text) for each added line of the diff against HEAD, plus every text line of each untracked file. Binary files are skipped."""
+    lines, cur, new_no, in_hunk = [], None, 0, False
+    for l in _run(root, ["git", "diff", "HEAD", "-U0"]).stdout.splitlines():
+        if l.startswith("diff --git "):
+            cur, in_hunk = l.rsplit(" b/", 1)[-1], False
+        elif l.startswith("@@"):
+            m = re.search(r"\+(\d+)", l)
+            in_hunk, new_no = True, int(m.group(1)) if m else 0
+        elif in_hunk and cur and l.startswith("+"):
+            lines.append((cur, new_no, l[1:]))
+            new_no += 1
+    for f in _run(root, ["git", "ls-files", "-o", "--exclude-standard", "-z"]).stdout.split("\0"):
+        path = os.path.join(root, f)
+        if not f or not os.path.isfile(path):
+            continue
+        with open(path, "rb") as fh:
+            data = fh.read()
+        if b"\0" in data[:8000]:
+            continue
+        lines += [(f, i, text) for i, text in enumerate(data.decode("utf-8", "replace").splitlines(), 1)]
+    return lines
+
+
+def secrets_builtin(root="."):
+    """Regex fallback for the secrets gate when gitleaks is missing. Findings are 'file:line rule' or 'file secret-file-name'; matched text is never stored."""
+    root = os.path.abspath(root)
+    findings = [f"{f}:{n} {rule}" for f, n, text in _added_lines(root) for rule in scan_line(text)]
+    findings += [f"{f} secret-file-name" for f in _changed_names(root) if secret_file_name(f)]
+    return {"ok": not findings, "engine": "builtin", "findings": findings[:10]}
+
+
 def run_gates(root="."):
     root = os.path.abspath(root)
     gates = {}
@@ -82,9 +122,9 @@ def run_gates(root="."):
             rep = os.path.join(td, "r.json")
             r = _run(root, ["gitleaks", "dir", ".", "--no-banner", "--redact", "-r", rep, "-f", "json"], timeout=120)
             found = json.load(open(rep)) if os.path.exists(rep) and os.path.getsize(rep) else []
-            gates["secrets"] = {"ok": r.returncode == 0, "findings": [f"{f['File']}:{f['StartLine']} {f['RuleID']}" for f in found][:10]}
+            gates["secrets"] = {"ok": r.returncode == 0, "engine": "gitleaks", "findings": [f"{f['File']}:{f['StartLine']} {f['RuleID']}" for f in found][:10]}
     else:
-        gates["secrets"] = {"ok": True, "skipped": "gitleaks not installed"}
+        gates["secrets"] = secrets_builtin(root)
 
     bad = [f for f in _changed(root, ".py") if _run(root, [sys.executable, "-m", "py_compile", f]).returncode]
     if shutil.which("bash"):
