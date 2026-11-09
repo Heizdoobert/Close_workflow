@@ -6,18 +6,33 @@ import shutil
 import subprocess
 import sys
 
-from flow_engine import __version__, agents, bridge, engine, gate, plan, sandbox
+from flow_engine import __version__, agents, bridge, engine, gate, interview, plan, sandbox
 from flow_engine.resp import RedisError
 
 USAGE = ('usage: flow-task "<task message>"      store a task (with FLOW_EXEC=1 also run it)\n'
          '       flow-task enqueue "<message>"   store + queue for the listener, prints the id\n'
          "       flow-task status <id> | listen | gate [dir] | doctor | exec <id> <message>\n"
-         '       flow-task plan "<goal>" [--model <your model id>]   draft a plan (nothing runs until approve)\n'
+         '       flow-task plan "<goal>" [--model <your model id>] [--brief FILE --confirmed]   draft a plan (nothing runs until approve)\n'
+         '       flow-task interview "<goal>" [--model ID]   ask what you really want (one question at a time), then draft the plan from the confirmed brief\n'
+         '       flow-task interview-step "<goal>" [--qa FILE] [--model ID]   one interview round as JSON, for agents without a terminal\n'
          "       flow-task where [<plan>]   where a plan stands and the next action (default: newest plan of this repo)\n"
          "       flow-task show <plan> | approve <plan> [--wait] | retry <plan> | reject <plan> | report <plan> | run <plan> | plans\n"
          "       flow-task recover   resume plans whose runner died (no listener needed) and kill their orphan agent groups\n"
          "       flow-task clean [--older-than DAYS] [--result-branches]   remove finished plans' worktrees and flowstep/* branches (never a running plan)\n"
          "       flow-task doctor also reports the sandbox (bwrap) and gitleaks lines: a missing one is a warning, not a failure")
+
+
+VALUE_FLAGS = ("--model", "--brief", "--qa")
+
+
+def _opt(rest, flag):
+    """The value after `flag`, or None."""
+    return rest[rest.index(flag) + 1] if flag in rest[:-1] else None
+
+
+def _goal(rest):
+    """The words of a command that are not flags or flag values."""
+    return " ".join(r for i, r in enumerate(rest) if r not in VALUE_FLAGS and r != "--confirmed" and (i == 0 or rest[i - 1] not in VALUE_FLAGS))
 
 
 def doctor_checks():
@@ -82,11 +97,21 @@ def main(argv=None):
             print(json.dumps(res, ensure_ascii=False))
             return 0 if res["ok"] else 1
         if cmd == "plan" and rest:
-            model = rest[rest.index("--model") + 1] if "--model" in rest[:-1] else None
-            goal = " ".join(r for i, r in enumerate(rest) if r != "--model" and (i == 0 or rest[i - 1] != "--model"))
-            pid = plan.create(goal, model)
+            model, goal, brief = _opt(rest, "--model"), _goal(rest), None
+            if _opt(rest, "--brief"):
+                brief = json.loads(open(_opt(rest, "--brief"), encoding="utf-8").read())
+                brief["confirmed"] = "--confirmed" in rest  # only the user's yes may set this
+            pid = plan.create(goal, model, brief)
             print(plan.show(pid))
             return 0
+        if cmd == "interview" and rest:
+            if not interview.tty():
+                raise plan.PlanError("interview needs a terminal; an agent uses `flow-task interview-step` and asks the user itself")
+            pid = interview.run_cli(_goal(rest), _opt(rest, "--model"))
+            print(plan.show(pid))
+            return 0
+        if cmd == "interview-step" and rest:
+            return interview.main_step(_goal(rest), _opt(rest, "--qa"), _opt(rest, "--model"))
         if cmd == "where" and len(rest) <= 1:  # more words would be a task message ("where is the bug"): falls through to submit
             print(plan.where(rest[0] if rest else None))
             return 0

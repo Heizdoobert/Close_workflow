@@ -52,6 +52,14 @@ def work(prompt):
             return json.dumps(plan)
         except ValueError:
             return text
+    if "interview agent of an automated" in prompt:
+        log("interview")
+        replies = json.loads(os.environ["FAKE_INTERVIEW"])  # one reply per round; the last one repeats
+        return json.dumps(replies[min(next_count("interview_count"), len(replies) - 1)])
+    m = re.search(r"You are the ([\w-]+) persona", prompt)
+    if m:
+        log("persona", m.group(1))
+        return os.environ.get("FAKE_SHIP_" + m.group(1).upper().replace("-", "_"), '{"findings":[],"rollback_triggers":["error rate up"]}')
     if "review and simplification agent" in prompt:
         log("review")
         return os.environ.get("FAKE_REVIEW", '{"review":[],"simplify":[],"edge_cases":["empty input"]}')

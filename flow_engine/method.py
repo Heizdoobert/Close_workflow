@@ -1,9 +1,12 @@
-"""The 12-step working method, as far as code can hold it.
+"""The 16-step working method, as far as code can hold it.
 
- 1 research  2 why (root cause)  3 how (approach + rejected alternatives)  4 fix (the chosen one)  5 blast radius  6 spec   -> `analysis` block of plan.json
- 7 plan  8 build  9 test                                                                                                    -> plan.py steps, gate.py, acceptance
- 10 review  11 simplify                                                                                                     -> one read-only agent call over the merged diff
- 12 report                                                                                                                  -> report.md, with a coverage table
+ 1 interview (interview.py)  -> `brief` of plan.json, confirmed by the user
+ 2 research  3 why (root cause)  4 how (approach + rejected alternatives)  5 fix  6 blast radius  7 spec  -> `analysis` block of plan.json
+ 8 plan  9 build  10 test            -> plan.py steps, gate.py, acceptance
+ 11 security hardening, 14 code-verify -> audit.py: per-step gates and one scan of the whole diff
+ 12 review, 13 simplify              -> one read-only agent call over the merged diff
+ 15 report                           -> report.md with a coverage table
+ 16 ship (the agent-skills /ship): three read-only personas in parallel (code-reviewer, security-auditor, test-engineer), merged by code into GO / NO-GO + rollback plan
 
 What the harness checks itself: research cites files that exist at the base commit, every analysis field is present, a step may not delete, rename
 or orphan anything it did not declare (gate.blast_radius), review findings must point at files that are in the diff. What it cannot check: that the
@@ -120,9 +123,32 @@ def parse_review(obj, changed):
     return {"status": "ok", "review": rev, "simplify": sim, "edge_cases": [_s(x, 150) for x in (obj.get("edge_cases") or []) if isinstance(x, str)][:8], "dropped": d1 + d2}
 
 
+def _ship_row(sh):
+    if sh.get("decision") not in ("GO", "NO-GO"):
+        return "THIẾU", f"không chạy: {sh.get('decision') or 'không có'}"
+    ps = sh.get("personas") or {}
+    who = f"{sum(r['status'] == 'ok' for r in ps.values())}/{len(ps)} persona" if ps else ("bỏ fan-out (đổi nhỏ)" if sh.get("small") else "không gọi persona (plan chưa đạt)")
+    return "OK", f"{sh['decision']}: {len(sh['blockers'])} chặn, {len(sh['recommended'])} nên sửa, có kế hoạch rollback; {who}"
+
+
+def _scan_row(r, gate_name, last, done, what, limit=""):
+    """Security and code-verify rows: ran or not, what it found, how many steps passed the same scan as a gate."""
+    if not r or r.get("status") != "ok":
+        return "THIẾU", f"không chạy: {(r or {}).get('error') or 'không có'}"
+    ok = sum(f"{gate_name}:ok" in g for g in last)
+    return ("MỘT PHẦN" if limit else "OK"), f"{what}: {r['n_hard']} chặn, {r['n_soft']} nên xem; gate qua ở {ok}/{len(done)} bước" + (f"; {limit}" if limit else "")
+
+
+def step_brief(plan):
+    """What each step agent is told: the user's confirmed success criteria and non-goals, then the analysis."""
+    b = plan.get("brief")
+    req = f"Requirements the user confirmed: success: {_cut(b['success'], 200)}; non-goals: {_cut('; '.join(b['non_goals']) or '-', 200)}\n" if b else ""
+    return req + brief(plan.get("analysis"))
+
+
 def coverage(plan, st):
-    """(number, name, status, evidence) for each of the 12 steps, from facts in plan.json / state.json. status: OK, MỘT PHẦN or THIẾU."""
-    a, steps = plan.get("analysis"), st["steps"]
+    """(number, name, status, evidence) for each of the 16 steps, from facts in plan.json / state.json. status: OK, MỘT PHẦN or THIẾU."""
+    a, b, steps = plan.get("analysis"), plan.get("brief"), st["steps"]
     done = [e for e in steps.values() if e["status"] == "done"]
     last = [e["attempts"][-1].get("gates", "") for e in done if e.get("attempts")]
     blast = sum("blast_radius:ok" in g for g in last)
@@ -132,15 +158,140 @@ def coverage(plan, st):
 
     def has(k):
         return ("MỘT PHẦN", f"có, {told}") if a and a.get(k) else no_a
-    rows = [("Research", *(("OK", f"{len(a['research'])} file dẫn chứng, đều tồn tại ở base") if a else no_a)), ("Thinking Why (nguyên nhân gốc)", *has("root_cause")),
+    rows = [("Interview (làm rõ yêu cầu)", *((("OK" if b["confidence"] >= 95 else "MỘT PHẦN"), f"{len(b['qa'])} câu hỏi, độ tự tin {b['confidence']}% (agent tự báo), user xác nhận brief"
+                                                + (f"; còn {len(b['assumptions'])} giả định chưa xác nhận" if b["assumptions"] else "")) if b else ("THIẾU", "không phỏng vấn: yêu cầu đi thẳng vào plan"))),
+            ("Research", *(("OK", f"{len(a['research'])} file dẫn chứng, đều tồn tại ở base") if a else no_a)), ("Thinking Why (nguyên nhân gốc)", *has("root_cause")),
             ("How can do that (cách làm)", *(("MỘT PHẦN", f"có + {len(a['alternatives'])} phương án bị loại, {told}") if a else no_a)), ("How can fix that (cách sửa)", *has("fix")),
             ("Did it effect anything (blast radius)", *(("OK", f"gate blast_radius qua ở {blast}/{len(done)} bước; cảnh báo: drift {sum(bool(e.get('drift')) for e in steps.values())}, "
                                                               f"trùng file {len(st.get('overlap') or [])}") if a and blast == len(done) and done else ("MỘT PHẦN", f"gate blast_radius qua {blast}/{len(done)} bước" + ("" if a else "; không có phân tích")))),
             ("Spec", *has("spec")), ("Plan", "OK", f"{len(steps)} bước, khoá bằng hash `{st.get('plan_hash', '')}` khi approve"),
             ("Build", *(("OK", f"{len(done)}/{len(steps)} bước đã merge") if len(done) == len(steps) else ("MỘT PHẦN", f"{len(done)}/{len(steps)} bước đã merge"))),
             ("Test", *(("OK", "gates + acceptance từng bước + chạy lại trên branch đã merge") if integ and integ["ok"] else ("MỘT PHẦN" if integ else "THIẾU", "kiểm tra tích hợp không đạt" if integ else "không chạy tích hợp"))),
+            ("Security hardening", *_scan_row(st.get("security"), "security", last, done, "quét mẫu code nguy hiểm (eval, shell, SQL ghép chuỗi, pickle, TLS, XSS, cookie, chmod)",
+                                              "auth, rate limit, SSRF, quyền sở hữu tài nguyên KHÔNG kiểm tự động; security-auditor ở Ship đọc thêm")),
             ("Review", *(("OK", f"{len(rv['review'])} phát hiện ({sum(r['severity'] == 'high' for r in rv['review'])} high), chỉ tính file có trong diff") if rv.get("status") == "ok"
                          else ("THIẾU", f"không chạy: {rv.get('error') or rv.get('status') or 'không có'}"))),
             ("Simply Code", *(("OK", f"{len(rv['simplify'])} đề xuất tinh gọn (không tự sửa)") if rv.get("status") == "ok" else ("THIẾU", "không chạy cùng lượt review"))),
-            ("Report", "OK", "file này")]
+            ("Code verify (chống code ẩu)", *_scan_row(st.get("verify"), "code_verify", last, done, "stub, debugger, except nuốt lỗi, test không assert, file khai báo rỗng, import thừa")),
+            ("Report", "OK", "file này"), ("Ship (GO/NO-GO)", *_ship_row(st.get("ship") or {}))]
     return [(i, *r) for i, r in enumerate(rows, 1)]
+
+# --- 13 SHIP: the /ship command of agent-skills, as code -----------------------------------------------------------------
+PERSONAS = {
+    "code-reviewer": "Five-axis review of the change: correctness, readability, architecture, security, performance. Severity: critical (breaks behaviour or data), important (should fix before ship), suggestion.",
+    "security-auditor": "Vulnerability and threat-model pass: OWASP Top 10, input validation, secrets handling, auth/authz, injection, unsafe file or process use, dependency CVEs when a manifest changed. Severity: critical, high, medium, low.",
+    "test-engineer": "Coverage analysis of the change: which happy paths, edge cases, error paths and concurrency cases have no test (Read the existing tests). `problem` = the gap, `fix` = the test to add. Severity: critical (core path untested), important, suggestion.",
+}
+SENSITIVE_PATH = re.compile(r"(?i)(auth|login|passw|session|token|secret|credential|payment|billing|checkout|invoice|migrat|schema|\.sql$|database|(^|/)db[/._]|models?[/.]|\.env|config|setting|docker|compose|\.ya?ml$|\.toml$|\.github/)")
+SENSITIVE_TEXT = re.compile(r"(?i)\b(password|passwd|secret|token|credential|select\s.+\sfrom|insert\s+into|delete\s+from|\.execute\()")
+INFRA_PATH = re.compile(r"(?i)(\.env|config|setting|docker|compose|migrat|schema|\.sql$|\.ya?ml$|\.toml$|\.github/|requirements|package\.json|pyproject)")
+UI_PATH = re.compile(r"(?i)\.(html?|css|scss|jsx|tsx|vue|svelte)$")
+DOC_PATH = re.compile(r"(?i)(\.(md|rst)$|(^|/)docs?/|changelog)")
+SEV = ("critical", "high", "important", "medium", "low", "suggestion")
+
+
+def is_small(changed, lines, diff):
+    """ship rule 5: the fan-out may be skipped only for <=2 files, <50 changed lines and nothing touching auth, payments, data access or config."""
+    return len(changed) <= 2 and lines < 50 and not any(SENSITIVE_PATH.search(f) for f in changed) and not SENSITIVE_TEXT.search(
+        "\n".join(l for l in diff.splitlines() if l.startswith("+") and not l.startswith("+++")))
+
+
+def persona_prompt(name, goal, spec, changed, diff):
+    return (f"You are the {name} persona of an automated engineering system's ship check. Read-only: do not edit anything, do not call other agents. The merged result is in your current directory.\n"
+            f"{PERSONAS[name]}\nGoal: {goal}\nSpec: {_cut(spec, 600)}\nChanged files: {', '.join(changed)}\nDiff:\n{diff}\n\n"
+            'Reply with ONLY one JSON object: {"findings":[{"file":"","line":0,"severity":"","problem":"","fix":""}]'
+            + (',"rollback_triggers":["observable signals that should make the team roll this change back"]' if name == "code-reviewer" else "")
+            + '}. Report only what you can point to in the diff or in files it touches; an empty list when clean.')
+
+
+def parse_persona(name, obj, changed):
+    """Findings about files in the diff only (counted as dropped otherwise); severity normalised, unknown -> important."""
+    raw = [i for i in (obj.get("findings") if isinstance(obj.get("findings"), list) else []) if isinstance(i, dict)]
+    mine = [i for i in raw if _s(i.get("file"), 300) in changed]
+    out = []
+    for i in mine[:12]:
+        sev = _s(i.get("severity"), 20).lower()
+        out.append({"file": _s(i.get("file"), 300), "line": _s(i.get("line"), 10), "severity": sev if sev in SEV else "important", "problem": _s(i.get("problem"), 250), "fix": _s(i.get("fix"), 250)})
+    trig = [_s(x, 150) for x in (obj.get("rollback_triggers") or []) if isinstance(x, str)][:5] if name == "code-reviewer" else []
+    return {"status": "ok", "findings": out, "dropped": len(raw) - len(mine), "rollback_triggers": trig}
+
+
+def rollback(pid, base, head, files, triggers):
+    """Mandatory before any GO: when to roll back, the exact commands, and an honest recovery estimate."""
+    risky = [f for f in files if INFRA_PATH.search(f)]
+    return {"triggers": (triggers or []) + ["test hoặc acceptance của plan fail sau khi merge", "lỗi mới trong log liên quan tới file đã đổi (Loki {job=\"flow\"})"],
+            "procedure": [f"chưa merge: `git branch -D flow/{pid}` (nhánh của bạn chưa bị đụng)", f"đã merge bằng merge commit: `git revert -m 1 <merge-commit>`",
+                          f"đã fast-forward: `git revert --no-edit {base[:10]}..{head or 'flow/' + pid}`"],
+            "rto": "vài phút: chỉ cần lệnh git" if not risky else f"git không đủ: {', '.join(risky[:4])} là cấu hình, hạ tầng hoặc dữ liệu, phải hoàn tác tay thêm"}
+
+
+def decide(plan, st, personas, files, small, step_review):
+    """The merge phase, in code: blockers, recommended fixes, acknowledged risks. Any blocker (critical finding, failed integration, unfinished steps,
+    a persona that did not run) means NO-GO; GO always comes with a rollback plan."""
+    blockers, rec, risks = [], [], []
+    steps = st["steps"]
+    if any(e["status"] != "done" for e in steps.values()):
+        blockers.append("harness: chưa đủ bước done (" + ", ".join(f"{k}={e['status']}" for k, e in steps.items() if e["status"] != "done") + ")")
+    integ = st.get("integration")
+    if not integ or not integ["ok"]:
+        blockers.append("harness: kiểm tra tích hợp không đạt" if integ else "harness: không có kiểm tra tích hợp")
+    for name, r in personas.items():
+        if r["status"] != "ok":
+            blockers.append(f"{name}: không chạy ({r.get('error') or r['status']}), thiếu báo cáo nên không thể GO")
+            continue
+        for f in r["findings"]:
+            line = f"{name}: [{f['severity']}] `{f['file']}:{f['line']}` {f['problem']} → {f['fix']}"
+            if f["severity"] == "critical" or (name == "security-auditor" and f["severity"] == "high"):
+                blockers.append(line)
+            elif f["severity"] in ("high", "important", "medium"):
+                rec.append(line)
+    for key, label in (("security", "hardening"), ("verify", "code-verify")):
+        r = st.get(key)
+        if not r or r.get("status") != "ok":
+            blockers.append(f"{label}: không chạy ({(r or {}).get('error') or 'không có'}), thiếu bằng chứng nên không thể GO")
+            continue
+        blockers += [f"{label}: {h}" for h in r["hard"][:6]] + ([f"{label}: còn {r['n_hard'] - 6} chặn nữa"] if r["n_hard"] > 6 else [])
+        rec += [f"{label}: {h}" for h in r["soft"][:4]] + ([f"{label}: còn {r['n_soft'] - 4} mục nên xem nữa"] if r["n_soft"] > 4 else [])
+    for r in (step_review or {}).get("review", []):
+        if r["severity"] == "high":
+            rec.append(f"review: `{r['file']}:{r['line']}` {r['problem']}")
+    drift = sorted({p for e in steps.values() for p in e.get("drift", [])})
+    if drift:
+        rec.append(f"file ngoài kế hoạch được merge: {', '.join(drift[:6])}")
+    if not small and any(not DOC_PATH.search(f) and not is_test_path(f) for f in files) and not any(DOC_PATH.search(f) for f in files):
+        rec.append("tài liệu (README, CHANGELOG, docs) không đổi dù code đổi")
+    infra = [f for f in files if INFRA_PATH.search(f)]
+    if infra:
+        risks.append(f"đổi cấu hình, hạ tầng hoặc dữ liệu, engine không kiểm được ngoài test: {', '.join(infra[:5])}")
+    ui = [f for f in files if UI_PATH.search(f)]
+    if ui:
+        risks.append(f"đổi giao diện ({', '.join(ui[:4])}): bàn phím, screen reader, contrast chưa được kiểm, cần kiểm tay")
+    if small:
+        risks.append("đổi nhỏ (<=2 file, <50 dòng, không đụng auth/thanh toán/dữ liệu/cấu hình): bỏ fan-out theo luật của /ship, chỉ dựa vào bằng chứng của harness")
+    return {"decision": "NO-GO" if blockers else "GO", "blockers": blockers, "recommended": rec, "risks": risks}
+
+
+def is_test_path(f):
+    return bool(re.search(r"(^|/)(tests?/|test_[^/]*$|[^/]*_test\.[a-z]+$)", f))
+
+
+def ship_md(sh):
+    """Phase C of /ship, for report.md."""
+    if sh.get("decision") in (None, "off"):
+        return []
+    lines = [f"## Quyết định SHIP: {sh['decision']}", "", "### Chặn (phải sửa trước khi ship)"] + ([f"- {b}" for b in sh["blockers"]] or ["- (không có)"])
+    lines += ["", "### Nên sửa trước khi ship"] + ([f"- {r}" for r in sh["recommended"]] or ["- (không có)"])
+    lines += ["", "### Rủi ro đã biết (vẫn ship)"] + ([f"- {r}" for r in sh["risks"]] or ["- (không có)"])
+    rb = sh["rollback"]
+    lines += ["", "### Kế hoạch rollback", "- khi nào rollback: " + "; ".join(rb["triggers"]), *[f"- cách: {p}" for p in rb["procedure"]], f"- thời gian khôi phục: {rb['rto']}", "",
+              "### Ba persona (chạy song song)"]
+    lines += [f"- {n}: {r['status']}" + (f", {len(r['findings'])} phát hiện, bỏ {r['dropped']} ngoài diff" if r["status"] == "ok" else f" ({r.get('error', '')})") for n, r in sh["personas"].items()] or ["- không gọi persona"]
+    return lines
+
+
+def audit_md(title, r):
+    """A security-hardening or code-verify section for report.md ([] when the scan did not run)."""
+    if not r or r.get("status") != "ok":
+        return []
+    return ["", f"## {title}", *([f"- CHẶN {h}" for h in r["hard"]] or ["- không có mục chặn"]), *[f"- nên xem {x}" for x in r["soft"]],
+            *([f"- (còn {r['n_hard'] + r['n_soft'] - len(r['hard']) - len(r['soft'])} mục nữa, xem state.json)"] if r["n_hard"] + r["n_soft"] > len(r["hard"]) + len(r["soft"]) else [])]

@@ -13,7 +13,8 @@ import subprocess
 import sys
 import tempfile
 
-from flow_engine import bridge
+from flow_engine import audit, bridge
+from flow_engine.audit import is_test_file  # noqa: F401  (re-exported: the constraints gate and the tests use gate.is_test_file)
 from flow_engine.secrets import scan_line, secret_file_name
 
 
@@ -33,13 +34,9 @@ def _changed(root, *exts):
 
 
 # Markers are written with a character class (e.g. "[o]") so this line's own diff does not match the gate it defines.
-WEAK = re.compile(r"^\+.*(@ts-ign[o]re|eslint-disabl[e]|type:\s*ignore|pytest\.mark\.(skip|xfail)|\bxit\(|\bit\.skip|no[q]a)", re.M)
+WEAK = re.compile(r"^\+.*(@ts-ign[o]re|eslint-disabl[e]|type:\s*ignore|pytest\.mark\.(skip|xfail)|\bxit\(|\bit\.skip|no[q]a|no[s]ec\b)", re.M)
 DROPPED = re.compile(r"^-\s*(def test_|it\(|test\()")
 ASSERT = re.compile(r"^\s*assert\b")
-
-
-def is_test_file(f):
-    return f.endswith(("_test.py",)) or os.path.basename(f).startswith("test_") or "tests" in f.split("/")[:-1]
 
 
 def _per_file(diff):
@@ -75,17 +72,22 @@ def constraints(root="."):
             "deleted_tests": deleted, "files": files}
 
 
-def _changed_names(root):
-    """Every file the diff against HEAD touches, plus untracked files (NUL-separated, so odd names survive)."""
-    out = _run(root, ["git", "diff", "--name-only", "-z", "HEAD"]).stdout.split("\0")
+def _changed_names(root, ref="HEAD"):
+    """Every file the diff against `ref` touches, plus untracked files (NUL-separated, so odd names survive)."""
+    out = _run(root, ["git", "diff", "--name-only", "-z", ref]).stdout.split("\0")
     out += _run(root, ["git", "ls-files", "-o", "--exclude-standard", "-z"]).stdout.split("\0")
     return sorted({f for f in out if f})
 
 
-def _added_lines(root):
-    """(file, line number, text) for each added line of the diff against HEAD, plus every text line of each untracked file. Binary files are skipped."""
+def _deleted(root, ref="HEAD"):
+    """Paths the diff against `ref` deletes or renames away."""
+    return {l.split("\t")[1] for l in _run(root, ["git", "diff", "--name-status", "-M", ref]).stdout.splitlines() if l[:1] in ("D", "R") and "\t" in l}
+
+
+def _added_lines(root, ref="HEAD"):
+    """(file, line number, text) for each added line of the diff against `ref`, plus every text line of each untracked file. Binary files are skipped."""
     lines, cur, new_no, in_hunk = [], None, 0, False
-    for l in _run(root, ["git", "diff", "HEAD", "-U0"]).stdout.splitlines():
+    for l in _run(root, ["git", "diff", ref, "-U0"]).stdout.splitlines():
         if l.startswith("diff --git "):
             cur, in_hunk = l.rsplit(" b/", 1)[-1], False
         elif l.startswith("@@"):
@@ -139,7 +141,7 @@ def blast_radius(root, allowed):
 
 
 def run_gates(root=".", allowed=None):
-    """allowed = the files a plan step declared; given, the blast_radius gate runs too."""
+    """allowed = the files a plan step declared; given, the blast_radius, security (hardening) and code_verify gates run too."""
     root = os.path.abspath(root)
     gates = {}
 
@@ -169,6 +171,9 @@ def run_gates(root=".", allowed=None):
     gates["constraints"] = constraints(root)
     if allowed is not None:
         gates["blast_radius"] = blast_radius(root, allowed)
+        added = _added_lines(root)
+        for name, r in (("security", audit.hardening(added, _changed_names(root))), ("code_verify", audit.verify(root, added, allowed, _deleted(root)))):
+            gates[name] = {"ok": not r["hard"], "findings": r["hard"][:10], "soft": len(r["soft"])}
 
     if os.environ.get("FLOW_CRITIC") == "1" and bridge.agent_system():
         fails = [f for f in _changed(root, ".py") if bridge.run_agent("critic", "--file", f, cwd=root).returncode]

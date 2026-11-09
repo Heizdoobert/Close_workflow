@@ -1,4 +1,4 @@
-"""The 12-step method: analysis block (steps 1-6), blast-radius gate (5), review + simplify pass (10-11), coverage table in the report (12)."""
+"""The 16-step method: analysis block (research..spec), blast-radius gate, review + simplify pass, coverage table in the report, SHIP decision. Interview, security and code-verify have their own test files."""
 
 import json
 import subprocess
@@ -141,23 +141,23 @@ def test_review_findings_are_kept_only_for_files_in_the_diff(env, monkeypatch):
     rv = json.loads(_read(env, pid, "state.json"))["review"]
     assert rv["status"] == "ok" and [r["file"] for r in rv["review"]] == ["a.py"] and rv["review"][0]["severity"] == "high" and rv["dropped"] == 1
     rep = _read(env, pid, "report.md")
-    for needle in ("Độ phủ 12 bước", "no guard for a negative value", "inline the constant", "negative value", "Phân tích (bước 1-6)", "nguyên nhân gốc", "blast_radius qua ở 1/1"):
+    for needle in ("Độ phủ 16 bước", "no guard for a negative value", "inline the constant", "negative value", "Phân tích (nghiên cứu", "nguyên nhân gốc", "blast_radius qua ở 1/1"):
         assert needle in rep, needle
     assert "invented" not in rep
 
 
-def test_all_twelve_steps_appear_in_the_coverage_table(env, monkeypatch):
+def test_all_sixteen_steps_appear_in_the_coverage_table(env, monkeypatch):
     pid = _run_plan(env, monkeypatch)
     rows = [l for l in _read(env, pid, "report.md").splitlines() if l.startswith("| ") and l.split("|")[1].strip().isdigit()]
-    assert [l.split("|")[1].strip() for l in rows] == [str(i) for i in range(1, 13)]
-    assert all("THIẾU" not in l for l in rows)
+    assert [l.split("|")[1].strip() for l in rows] == [str(i) for i in range(1, 17)]
+    assert "THIẾU" in rows[0] and all("THIẾU" not in l for l in rows[1:])  # no interview was done here, everything else ran
 
 
 def test_an_unusable_review_reply_does_not_change_the_plan_result(env, monkeypatch):
     pid = _run_plan(env, monkeypatch, "not json at all")
     st = json.loads(_read(env, pid, "state.json"))
     assert st["status"] == "done" and st["review"]["status"] == "not_run"
-    rows = [l for l in _read(env, pid, "report.md").splitlines() if l.startswith("| 10 ") or l.startswith("| 11 ")]
+    rows = [l for l in _read(env, pid, "report.md").splitlines() if l.startswith("| 12 ") or l.startswith("| 13 ")]  # review and simplify
     assert len(rows) == 2 and all("THIẾU" in r for r in rows)  # the report says the step did not run
 
 

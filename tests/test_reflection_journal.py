@@ -98,7 +98,7 @@ def test_the_same_failure_three_times_ends_stuck_without_more_attempts(env, monk
 
 def test_a_file_outside_the_plan_is_drift_but_its_test_file_is_not(env):
     env.script([step("s1", files=["a.py"], acc="test -f a.py")],
-               {"s1": {"files": {"a.py": "1\n", "extra.txt": "x\n", "tests/test_a.py": "def test_x():\n    pass\n"}}})
+               {"s1": {"files": {"a.py": "1\n", "extra.txt": "x\n", "tests/test_a.py": "def test_x():\n    assert 1\n"}}})
     pid = plan.create("g")
     assert plan.approve(pid, wait_for=True) == "done"  # drift never blocks the merge
     assert _state(env, pid)["steps"]["s1"]["drift"] == ["extra.txt"]
