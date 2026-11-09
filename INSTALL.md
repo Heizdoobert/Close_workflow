@@ -33,6 +33,8 @@ Claude Code CLI registers MCP servers itself; the installer prints the exact com
 
 ## 2. Use
 
+Just installed? Check it before you use it on a real project: `flow-task doctor`, then `flow-task selftest` (runs the whole plan flow once in a throwaway repo, about 0.03 USD). The full ladder is in [AGENT_SETUP.md](AGENT_SETUP.md) section 5.
+
 ```bash
 flow-task doctor                         # health: Redis, listener, claude, agent-system
 flow-task listen                         # run the listener in the foreground (or install with --service)

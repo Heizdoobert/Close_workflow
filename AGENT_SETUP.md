@@ -6,7 +6,7 @@ Result you must reach: `flow-task` and `agent-system` run from any folder, the M
 
 ## 0. Rules for you
 - Never print or copy `.env` or any password, token or API key. Never push, never change git remotes, never edit a rules file outside the `<!-- agent-system:begin -->`...`<!-- agent-system:end -->` block.
-- Do not run a paid task (`flow-task plan`, `enqueue`) to "test". The checks below cost nothing.
+- Spend tokens only where step 5 says so (levels 1 to 3, about 0.04 USD in total). Never approve a plan on the user's real project without their OK.
 - Work from the repo root (the folder holding `install.py`). If the repo is not cloned yet: `git clone https://github.com/Heizdoobert/Close_workflow.git FLOW_SKILL` and `cd FLOW_SKILL`.
 
 ## 1. Detect
@@ -61,8 +61,50 @@ Listener (needed for `flow-task enqueue`, not for `task:[...]` plans): `flow-tas
 
 Re-running `install.py --full` is safe: existing `flow-task`/`agent-system` commands are kept as `*.bak`, a different skill copy as `SKILL.md.bak`, and only the marked blocks in rules files are rewritten.
 
-## 5. Report to the user (short)
-- Checks run and their result (paste the `flow-task doctor` lines).
+## 5. Test before you adopt it (a ladder: stop at the first FAIL, fix it, do not skip a level)
+Do this once on the new machine, before you use the system on a real project.
+
+| Level | Command | Cost | Pass means |
+|---|---|---|---|
+| 0 | `.venv/bin/pip install pytest && .venv/bin/python -m pytest -q` (Windows: `.venv\Scripts\python`) | 0, about 2 min | `N passed`, no `failed`. Fake Redis and fake agents, so no network and no tokens. POSIX-only tests are skipped on Windows: say so |
+| 1 | `flow-task "smoke test: answer OK, change no file"` prints `Task stored in Redis with ID <id>`; then `flow-task exec <id> "smoke test: answer OK, change no file"` | about 0.002 USD | `done task <id> (1 attempt(s)...)`, and `flow-task status <id>` shows `"status": "done"` |
+| 2 | `flow-task selftest` | about 0.03 USD, 1 to 2 min | every line `OK` and `selftest PASSED` |
+| 3 | `flow-task interview-step "make the thing faster"` | about 0.002 USD | JSON with `confidence` below 95, one `question`, a `guess`, and `coverage` naming 7 items (who, why, impact, success, constraints, non_goals, risks) |
+
+- Level 0 proves the code. Level 1 proves `claude`, Redis and the listener path. Level 2 runs the real flow once in a throwaway git repo: planner, three parallel steps in git worktrees, the gates, the merge, the integration re-run, the review, the SHIP personas and the report. It also proves git worktrees work between the temp dir and this install folder (two filesystems on many machines). Level 3 proves the interview. Run level 2 unless the user said to spend nothing; then say it was skipped.
+- A `FAIL` line names what broke. `every step merged` FAIL: read `flow-task selftest --keep` output, then `plans/<id>/report.md` (kept by `--keep`) and `plans/<id>/journal/`. `plan drafted` FAIL: the planner could not return valid JSON, look at `claude` itself (`claude -p "say OK"`).
+- Do not touch the user's real repo during levels 0 to 3: selftest builds its own repo and removes it afterwards.
+
+Then adopt it step by step on the real project:
+1. Pick **one** small, low-risk task. Check `git status` is clean and the work is committed: sub-agents only see the committed HEAD.
+2. `flow-task interview "<task>"` (needs a terminal) or, with no terminal, `flow-task interview-step` and ask the user each question yourself (see section 6). Then draft the plan. Show the user the plan: steps, files, dependencies, acceptance command per step, and the analysis. Nothing has run yet.
+3. Only after the user's OK: `flow-task approve <id>` (or MCP `flow_plan_approve`). Check `flow-task where` at long intervals.
+4. Give the user `plans/<id>/report.md` as it is. Read the `Độ phủ 16 bước` table with them: `MỘT PHẦN` rows are the model's own statement, `THIẾU` means that step did not run, `NO-GO` stays NO-GO until the blockers are fixed or the user accepts the risk. The branch is `flow/<id>`; never merge it for the user.
+5. Only after that first task came out right, use it for more projects. Keep `FLOW_PLAN_MAX_USD` (default 3.0) and `FLOW_STEP_USD` (0.40) as the cost ceiling.
+
+## 6. How to use it (what you need to know to operate it)
+The user writes `task:[what they want]`. You then follow the skill `closed-loop-task-engine` (installed in step 2): recall memory, interview, plan, show the plan and wait, approve on their OK, report.
+
+The 16 steps the system runs (and where they live): 1 interview, 2 research, 3 root cause, 4 how it can be done, 5 how to fix it, 6 blast radius, 7 spec (2 to 7 are the `analysis` block the planner must write), 8 plan, 9 build (parallel agents in git worktrees), 10 test (gates + each step's acceptance command + a re-run on the merged branch), 11 security hardening, 12 review, 13 simplify, 14 code-verify, 15 report, 16 SHIP (GO / NO-GO with a rollback plan). Steps 11 and 14 run as gates on every step and once over the whole diff.
+
+Interview without a terminal (an agent):
+```
+flow-task interview-step "<goal>" --qa qa.json        # one JSON round: confidence, coverage, hypothesis, question, guess, brief
+```
+Ask the user only the `question` (with the `guess`), append `{"q": "...", "a": "..."}` to `qa.json` (write `(chấp nhận đoán) <guess>` if they only accepted the guess), call again. When `brief` appears, show it and ask "đúng chưa?". After an explicit yes: save the brief to a file and run `flow-task plan "<goal>" --brief brief.json --confirmed`. `--confirmed` only after their yes.
+
+Commands you will use: `flow-task where` (state and next action), `show <plan>`, `approve <plan> [--wait]`, `retry <plan>` (failed steps run again), `report <plan>`, `reject <plan>`, `recover` (resume plans whose runner died), `clean` (remove finished plans' worktrees), `doctor`, `selftest`.
+
+## 7. Limits you must tell the user (do not hide them)
+- Root cause, approach, fix and spec are written by the model; the harness only checks that they are there and that cited research files exist. Their rows say `MỘT PHẦN`.
+- Interview confidence is the agent's own number. The code does reject 95+ while one of the 7 items is unknown, and it lists every answer the user only accepted as an assumption. It cannot tell whether a person really answered.
+- Security hardening scans for dangerous code patterns only: auth, rate limits, SSRF and resource ownership are not checked automatically. Review and SHIP are advisory and use the same model family that wrote the code.
+- The blast-radius gate sees paths and top-level Python functions and classes, not methods or signatures.
+- MCP `flow_plan_create` has no `brief` argument: after an interview use the CLI.
+- Sub-agents see committed code only. The Claude sandbox needs bwrap (Linux); without it one warning is logged. agy is not sandboxed. Not yet tested on this OS if it is Windows or macOS: say so.
+
+## 8. Report to the user (short)
+- Checks run and their result (paste the `flow-task doctor` lines and the test ladder results: pytest count, the level 1 cost, the `selftest` lines, the interview-step check; say which level you skipped and why).
 - What was installed and where (repo path, venv, which clients got MCP and rules).
 - What the user must do, if anything: restart Claude Code / Claude Desktop / Cursor / Antigravity so the MCP server loads; anything you could not install without admin rights.
 - How to use it: write `task:[what you want]` in an agent; it plans, shows the plan, waits for the user's OK, then runs in git worktrees and returns `plans/<id>/report.md` plus branch `flow/<id>`.

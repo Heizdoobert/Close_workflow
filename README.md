@@ -12,7 +12,7 @@ flow-task enqueue "task text"  ->  Redis task:<id>  ->  listener  ->  claude -p 
 - `flow_engine/` stdlib Python core: `resp.py` (Redis client), `engine.py` (tasks, runner, listener), `gate.py` (0-token gates), `bridge.py` (Agent_system recall/learn), `cli.py` (`flow-task`).
 - `install.py` + `install.sh` / `install.ps1` cross-OS installer. `run_task.sh`, `listener.sh` are shims kept for existing `/usr/local/bin/flow-task` and units.
 - `docker-compose.yml` Redis (password from `.env`), `docker-compose-logging.yml` Loki + Promtail + Grafana, `grafana/` dashboards.
-- `tests/` pytest with a fake Redis: `pip install -e . pytest && pytest`.
+- `tests/` pytest with a fake Redis: `pip install -e . pytest && pytest`. `flow-task selftest` runs the real plan flow once in a throwaway repo (about 0.03 USD).
 
 ## Use
 ```bash

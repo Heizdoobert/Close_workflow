@@ -9,6 +9,9 @@ description = "Closed-loop task engine: Redis queue, cheap claude -p worker, scr
 requires-python = ">=3.9"
 dependencies = []
 
+[project.optional-dependencies]
+test = ["pytest"]
+
 [project.scripts]
 flow-task = "flow_engine.cli:main"
 

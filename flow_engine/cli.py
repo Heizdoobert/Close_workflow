@@ -6,13 +6,14 @@ import shutil
 import subprocess
 import sys
 
-from flow_engine import __version__, agents, bridge, engine, gate, interview, plan, sandbox
+from flow_engine import __version__, agents, bridge, engine, gate, interview, plan, sandbox, selftest
 from flow_engine.resp import RedisError
 
 USAGE = ('usage: flow-task "<task message>"      store a task (with FLOW_EXEC=1 also run it)\n'
          '       flow-task enqueue "<message>"   store + queue for the listener, prints the id\n'
          "       flow-task status <id> | listen | gate [dir] | doctor | exec <id> <message>\n"
          '       flow-task plan "<goal>" [--model <your model id>] [--brief FILE --confirmed]   draft a plan (nothing runs until approve)\n'
+         '       flow-task selftest [--model ID] [--keep]   run the whole plan flow once in a throwaway repo (real agents, about 0.03 USD) and print OK/FAIL per check\n'
          '       flow-task interview "<goal>" [--model ID]   ask what you really want (one question at a time), then draft the plan from the confirmed brief\n'
          '       flow-task interview-step "<goal>" [--qa FILE] [--model ID]   one interview round as JSON, for agents without a terminal\n'
          "       flow-task where [<plan>]   where a plan stands and the next action (default: newest plan of this repo)\n"
@@ -104,6 +105,8 @@ def main(argv=None):
             pid = plan.create(goal, model, brief)
             print(plan.show(pid))
             return 0
+        if cmd == "selftest" and all(r.startswith("--") or rest[i - 1] == "--model" for i, r in enumerate(rest)):
+            return selftest.run(_opt(rest, "--model"), "--keep" in rest)
         if cmd == "interview" and rest:
             if not interview.tty():
                 raise plan.PlanError("interview needs a terminal; an agent uses `flow-task interview-step` and asks the user itself")

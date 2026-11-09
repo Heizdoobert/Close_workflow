@@ -44,3 +44,12 @@ def test_claude_md_phase8_names_recover_clean_bwrap_and_gitleaks():
     phase8 = text.split("## Agentic plan flow", 1)[1]
     for word in ("recover", "clean", "bwrap", "gitleaks"):
         assert word in phase8, f"CLAUDE.md Phase 8 does not mention {word}"
+
+
+def test_the_setup_docs_teach_the_test_ladder_with_commands_that_exist():
+    setup = (REPO / "AGENT_SETUP.md").read_text(encoding="utf-8")
+    for needle in ("flow-task selftest", "pytest", "flow-task exec", "interview-step", "Độ phủ 16 bước", "Limits you must tell the user"):
+        assert needle in setup, needle
+    for cmd in ("selftest", "interview-step", "where", "retry", "recover", "clean"):  # every command the doc tells the agent to use is a real one
+        assert cmd in cli.USAGE, cmd
+    assert "selftest" in (REPO / "INSTALL.md").read_text(encoding="utf-8") and "pytest" in (REPO / "pyproject.toml").read_text(encoding="utf-8")
