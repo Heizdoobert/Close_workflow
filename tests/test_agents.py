@@ -8,14 +8,22 @@ from flow_engine import agents
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="fake binaries are POSIX scripts")
 HERE = Path(__file__).parent
+
+
+def launcher(d, script):
+    import stat
+    w = Path(d) / (Path(script).stem + ".sh")
+    w.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n')
+    w.chmod(w.stat().st_mode | stat.S_IEXEC)
+    return str(w)
 OSS = "gpt-oss-120b-medium"
 
 
 @pytest.fixture
 def fakes(tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_STATE_DIR", str(tmp_path))
-    monkeypatch.setenv("FLOW_CLAUDE", str(HERE / "fake_claude.py"))
-    monkeypatch.setenv("FLOW_AGY", str(HERE / "fake_agy.py"))
+    monkeypatch.setenv("FLOW_CLAUDE", launcher(tmp_path, str(HERE / "fake_claude.py")))
+    monkeypatch.setenv("FLOW_AGY", launcher(tmp_path, str(HERE / "fake_agy.py")))
     for k in ("FLOW_BACKENDS", "FLOW_PARENT_MODEL"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("FLOW_BACKOFF_BASE", "0.001")

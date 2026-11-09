@@ -53,3 +53,4 @@ def work(prompt):
         open(path, "w").write(content)
     log("step-end", sid, time.time())
     return f"step {sid} done: wrote {', '.join(files) or 'nothing'}"
+

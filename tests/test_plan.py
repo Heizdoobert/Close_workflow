@@ -12,6 +12,14 @@ from flow_engine import engine, plan
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="fake binaries are POSIX scripts")
 HERE = Path(__file__).parent
+
+
+def launcher(d, script):
+    import stat
+    w = Path(d) / (Path(script).stem + ".sh")
+    w.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n')
+    w.chmod(w.stat().st_mode | stat.S_IEXEC)
+    return str(w)
 OSS = "gpt-oss-120b-medium"
 
 
@@ -33,7 +41,7 @@ def env(tmp_path, monkeypatch):
     state.mkdir()
     (state / "steps.json").write_text("{}")
     for n, v in dict(FLOW_WORKDIR=str(repo), FLOW_HOME=str(home), FAKE_STATE_DIR=str(state), FAKE_STEPS=str(state / "steps.json"),
-                     FAKE_PLAN=str(state / "plan.json"), FLOW_CLAUDE=str(HERE / "fake_claude.py"), FLOW_AGY=str(HERE / "fake_agy.py"),
+                     FAKE_PLAN=str(state / "plan.json"), FLOW_CLAUDE=launcher(state, str(HERE / "fake_claude.py")), FLOW_AGY=launcher(state, str(HERE / "fake_agy.py")),
                      FLOW_BACKOFF_BASE="0.001", FLOW_BACKOFF_CAP="0.01", FLOW_PIN_BACKOFF_CAP="0.01", REDIS_PORT="1", FLOW_STALE="1").items():
         monkeypatch.setenv(n, v)
     for k in ("FLOW_BACKENDS", "FLOW_PARENT_MODEL", "FLOW_GATE"):
