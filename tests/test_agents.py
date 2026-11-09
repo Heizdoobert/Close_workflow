@@ -137,16 +137,32 @@ def test_gemini_flash_parent_goes_lighter_only_when_gpt_oss_truly_unusable(fakes
 
 
 def fake_claude_run(on_call):
-    """Stand-in for subprocess.run: a successful claude JSON answer; on_call(cmd) may raise or sleep."""
-    def run(cmd, **kw):
-        on_call(cmd)
-        return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps({"type": "result", "result": "ok", "is_error": False, "total_cost_usd": 0.0, "usage": {}}), stderr="")
-    return run
+    """Stand-in for subprocess.Popen: a successful claude JSON answer; on_call(cmd) may raise (also at spawn) or sleep."""
+    class FakePopen:
+        returncode = 0
+        pid = 99999999  # no such process: kill_group must tolerate it
+
+        def __init__(self, cmd, **kw):
+            self.cmd = cmd
+            if getattr(on_call, "at_spawn", False):
+                on_call(cmd)
+
+        def communicate(self, stdin=None, timeout=None):
+            if not getattr(on_call, "at_spawn", False):
+                on_call(self.cmd)
+            return json.dumps({"type": "result", "result": "ok", "is_error": False, "total_cost_usd": 0.0, "usage": {}}), ""
+
+        def kill(self):
+            pass
+
+        def wait(self):
+            return 0
+    return FakePopen
 
 
 def test_global_agent_cap_bounds_concurrent_subprocesses(fakes, monkeypatch):
     monkeypatch.setenv("FLOW_MAX_AGENTS", "2")
-    monkeypatch.setenv("FLOW_CLAUDE", "claude-fake")  # never executed: subprocess.run is replaced below
+    monkeypatch.setenv("FLOW_CLAUDE", "claude-fake")  # never executed: subprocess.Popen is replaced below
     lock, state = threading.Lock(), {"active": 0, "peak": 0}
 
     def enter(cmd):
@@ -157,7 +173,7 @@ def test_global_agent_cap_bounds_concurrent_subprocesses(fakes, monkeypatch):
         with lock:
             state["active"] -= 1
 
-    monkeypatch.setattr(agents.subprocess, "run", fake_claude_run(enter))
+    monkeypatch.setattr(agents.subprocess, "Popen", fake_claude_run(enter))
     results = []
     threads = [threading.Thread(target=lambda: results.append(agents.call(["claude:haiku"], "p", agents.Opts(str(fakes)), []))) for _ in range(5)]
     for t in threads:
@@ -175,10 +191,10 @@ def test_slot_released_after_timeout_so_later_calls_still_run(fakes, monkeypatch
     def hang(cmd):
         raise subprocess.TimeoutExpired(cmd, 1)
 
-    monkeypatch.setattr(agents.subprocess, "run", fake_claude_run(hang))
+    monkeypatch.setattr(agents.subprocess, "Popen", fake_claude_run(hang))
     with pytest.raises(subprocess.TimeoutExpired):
         agents._run(["claude-fake"], agents.Opts(str(fakes)))
-    monkeypatch.setattr(agents.subprocess, "run", fake_claude_run(lambda cmd: None))
+    monkeypatch.setattr(agents.subprocess, "Popen", fake_claude_run(lambda cmd: None))
     done = []
     t = threading.Thread(target=lambda: done.append(agents._run(["claude-fake"], agents.Opts(str(fakes)))), daemon=True)
     t.start()
@@ -189,13 +205,14 @@ def test_slot_released_after_timeout_so_later_calls_still_run(fakes, monkeypatch
 def test_slot_released_after_oserror(fakes, monkeypatch):
     monkeypatch.setenv("FLOW_MAX_AGENTS", "1")
 
-    def missing(cmd, **kw):
+    def missing(cmd):
         raise OSError("exec failed")
+    missing.at_spawn = True
 
-    monkeypatch.setattr(agents.subprocess, "run", missing)
+    monkeypatch.setattr(agents.subprocess, "Popen", fake_claude_run(missing))
     with pytest.raises(OSError):
         agents._run(["nope"], agents.Opts(str(fakes)))
-    monkeypatch.setattr(agents.subprocess, "run", fake_claude_run(lambda cmd: None))
+    monkeypatch.setattr(agents.subprocess, "Popen", fake_claude_run(lambda cmd: None))
     assert agents._run(["ok"], agents.Opts(str(fakes))).returncode == 0
 
 
@@ -206,7 +223,7 @@ def test_file_slot_shared_with_other_processes(fakes, monkeypatch):
     slots.mkdir(parents=True, exist_ok=True)
     held = open(slots / "slot-0.lock", "a+")  # stands in for another plan runner process holding the only slot
     fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    monkeypatch.setattr(agents.subprocess, "run", fake_claude_run(lambda cmd: None))
+    monkeypatch.setattr(agents.subprocess, "Popen", fake_claude_run(lambda cmd: None))
     done = []
     t = threading.Thread(target=lambda: done.append(agents._run(["x"], agents.Opts(str(fakes)))), daemon=True)
     t.start()

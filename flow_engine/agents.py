@@ -13,6 +13,7 @@ import os
 import random
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import threading
@@ -138,10 +139,35 @@ def _slot():
         sem.release()
 
 
+def new_group():
+    """Popen kwargs that put the child in its own process group, so a timeout can kill its children too."""
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def kill_group(p):
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], capture_output=True)
+    else:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)  # session leader: its process group id is its pid
+        except OSError:
+            pass  # already gone
+    p.kill()
+    p.wait()
+
+
 def _run(cmd, o, stdin=None, env=None):
     with _slot():  # only the subprocess itself holds a slot: backoff sleeps happen outside
-        return subprocess.run(cmd, input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                              timeout=o.timeout, cwd=o.workdir, env=env)
+        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+                             cwd=o.workdir, env=env, **new_group())
+        try:
+            out, err = p.communicate(stdin, timeout=o.timeout)
+        except subprocess.TimeoutExpired:
+            kill_group(p)  # subprocess.run would kill only the direct child and leave its children running
+            raise
+        return subprocess.CompletedProcess(cmd, p.returncode, out, err)
 
 
 def run_claude(model, prompt, o):

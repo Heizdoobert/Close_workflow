@@ -27,6 +27,7 @@ IDENT = ["-c", "user.name=flow-engine", "-c", "user.email=flow@localhost"]
 JUNK = [":(glob)**/__pycache__/**", ":(glob)**/*.pyc", ":(glob).pytest_cache/**"]  # build junk a repo without a .gitignore would otherwise commit
 WIN_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
 WIN_BAD_CHARS = re.compile(r'[<>:"|?*]')
+SECRET_ENV = re.compile(r"(?i)(KEY|TOKEN|SECRET|PASSW|CREDENTIAL|AUTH)")
 ACCEPT_TAIL_BYTES = 64 * 1024  # per stream; only the last part is kept for the report and the retry prompt
 # likely secrets; masked before anything is written to state, reports or recipes (the goal in plan.json is user input, left as is)
 SECRET_PATTERNS = [
@@ -237,6 +238,8 @@ def create(goal, parent_model=None):
              "plan_cost_usd": round(cost, 6), "plan_trace": trace, "steps": {s["id"]: {"status": "pending"} for s in plan["steps"]}}
     if dirty:
         state["dirty_files"] = dirty[:20]
+    for e in trace:  # an agent error can echo an API key
+        e["error"] = redact(e.get("error", ""))
     _atomic(d / "plan.json", json.dumps(plan, indent=2, ensure_ascii=False))
     _atomic(d / "state.json", json.dumps(state, indent=2, ensure_ascii=False))
     (d / "plan.md").write_text(render_md(pid, plan, state), encoding="utf-8")
@@ -259,13 +262,17 @@ def spawn(pid):
                          "PYTHONPATH": os.pathsep.join(filter(None, [str(Path(__file__).resolve().parent.parent), os.environ.get("PYTHONPATH")]))}, **kw)
 
 
+def _hash(plan):
+    return hashlib.sha256(json.dumps(plan, sort_keys=True).encode()).hexdigest()[:16]
+
+
 def approve(pid, wait_for=False):
     """Freeze the (possibly hand-edited) plan by hash and start the runner in the background."""
     d, plan, state = load(pid)
     if state["status"] not in ("awaiting_approval",):
         raise PlanError(f"plan is {state['status']}, not awaiting approval")
     validate(plan)
-    state.update(status="approved", approved=engine.now(), plan_hash=hashlib.sha256(json.dumps(plan, sort_keys=True).encode()).hexdigest()[:16])
+    state.update(status="approved", approved=engine.now(), plan_hash=_hash(plan))
     state["steps"] = {s["id"]: state["steps"].get(s["id"], {"status": "pending"}) for s in plan["steps"]}
     _atomic(d / "state.json", json.dumps(state, indent=2, ensure_ascii=False))
     _mirror(pid, status="approved")
@@ -354,23 +361,7 @@ class Ctx:
         return self.state.get("cost_usd", 0)
 
 
-def _new_group():
-    """Popen kwargs that put the child in its own process group, so a timeout can kill its children too."""
-    if os.name == "nt":
-        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
-    return {"start_new_session": True}
-
-
-def _kill_group(p):
-    if os.name == "nt":
-        subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], capture_output=True)
-    else:
-        try:
-            os.killpg(p.pid, signal.SIGKILL)  # session leader: its process group id is its pid
-        except OSError:
-            pass  # already gone
-    p.kill()
-    p.wait()
+_new_group, _kill_group = agents.new_group, agents.kill_group
 
 
 def _tail(f):
@@ -386,7 +377,8 @@ def accept(step, wt):
         return {"cmd": "", "ok": True, "skipped": True}
     # output goes to files, not pipes: a grandchild that outlives the kill cannot keep us waiting on an open pipe
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
-        p = subprocess.Popen(cmd, shell=True, cwd=wt, stdin=subprocess.DEVNULL, stdout=out, stderr=err, **_new_group())
+        env = {k: v for k, v in os.environ.items() if not SECRET_ENV.search(k)}  # the planner wrote this command: it gets no API keys
+        p = subprocess.Popen(cmd, shell=True, cwd=wt, stdin=subprocess.DEVNULL, stdout=out, stderr=err, env=env, **_new_group())
         try:
             p.wait(timeout=int(os.environ.get("FLOW_ACCEPT_TIMEOUT", "300")))
         except subprocess.TimeoutExpired:
@@ -520,6 +512,10 @@ def _launchable(ctx, running_files):
 
 def run(pid):
     d, plan, state = load(pid)
+    if state.get("plan_hash") and _hash(plan) != state["plan_hash"]:  # approval froze this plan: an edited plan.json must not run (or resume)
+        state.update(status="failed", error="plan.json changed after approval: not running it. Re-plan and approve again", finished=engine.now())
+        _atomic(d / "state.json", json.dumps(state, indent=2, ensure_ascii=False))
+        raise PlanError(state["error"])
     lock = engine.try_lock(d / "run.lock")
     if not lock:
         return "already running"
@@ -530,7 +526,7 @@ def run(pid):
     if not ctx.plan_wt.exists():
         git(ctx.repo, "worktree", "add", "-q", "-b", ctx.branch, str(ctx.plan_wt), plan["base"])
     for sid, ev in state["steps"].items():  # resume: a step caught mid-run by a crash starts over
-        if ev["status"] == "running":
+        if ev["status"] in ("running", "queued"):  # queued = picked, killed before its first save: _launchable only takes pending
             _cleanup(ctx, sid)
             ev.update(status="pending")
             ev.setdefault("rescues", []).append("runner died mid-step: restarted")

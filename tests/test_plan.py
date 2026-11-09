@@ -560,3 +560,57 @@ def test_detached_head_plan_is_created_from_the_commit_sha(env):
     assert d["base"] == env.main_head and len(d["base"]) == 40
     assert plan.approve(pid, wait_for=True) == "done"
     assert sh(env.repo, "git", "rev-parse", f"flow/{pid}^1") == env.main_head
+
+
+def _approved_not_started(env, monkeypatch, acc="test -f a.py"):
+    monkeypatch.setattr(plan, "spawn", lambda pid: None)
+    env.script([step("s1", files=["a.py"], acc=acc)], {"s1": {"files": {"a.py": "1\n"}}})
+    pid = plan.create("g")
+    plan.approve(pid)
+    return pid
+
+
+def test_plan_edited_after_approval_is_refused(env, monkeypatch):
+    pid = _approved_not_started(env, monkeypatch)
+    pf = env.home / "plans" / pid / "plan.json"
+    p = json.loads(pf.read_text())
+    p["steps"][0]["acceptance"] = "echo pwned"
+    pf.write_text(json.dumps(p))
+    with pytest.raises(plan.PlanError, match="changed after approval"):
+        plan.run(pid)
+    st = json.loads((env.home / "plans" / pid / "state.json").read_text())
+    assert st["status"] == "failed" and not [c for c in env.calls() if c[0] == "step-start"]  # nothing ran, and resume_stale will not respawn it
+
+
+def test_step_left_queued_by_a_killed_runner_is_run_again(env, monkeypatch):
+    pid = _approved_not_started(env, monkeypatch)
+    sf = env.home / "plans" / pid / "state.json"
+    st = json.loads(sf.read_text())
+    st["steps"]["s1"]["status"] = "queued"
+    sf.write_text(json.dumps(st))
+    assert plan.run(pid) == "done"
+
+
+def test_acceptance_command_gets_no_credentials_from_the_environment(env, monkeypatch):
+    monkeypatch.setenv("SECRET_PROBE_TOKEN", "hunter2hunter2")
+    monkeypatch.setenv("KEEP_ME", "ok")
+    pid = _approved_not_started(env, monkeypatch, acc='test -z "$SECRET_PROBE_TOKEN" && test "$KEEP_ME" = ok && test -f a.py')
+    assert plan.run(pid) == "done"
+
+
+def test_agent_timeout_kills_the_agents_children_too(tmp_path):
+    from flow_engine import agents
+    pidfile = tmp_path / "pid"
+    o = agents.Opts(str(tmp_path), "Read", 0.1, 1)
+    with pytest.raises(subprocess.TimeoutExpired):
+        agents._run(["sh", "-c", f"sleep 60 & echo $! > {pidfile}; wait"], o)
+    time.sleep(0.3)
+    pid = int(pidfile.read_text())
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)  # the grandchild is gone, not orphaned
+
+
+def test_gate_tool_that_hangs_becomes_a_failed_gate_not_a_crash():
+    from flow_engine import gate
+    r = gate._run(".", ["sleep", "30"], timeout=1)
+    assert r.returncode == 124 and "timeout" in r.stderr

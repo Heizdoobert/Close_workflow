@@ -20,6 +20,8 @@ def _run(root, cmd, **kw):
         return subprocess.run(cmd, cwd=root, capture_output=True, text=True, **kw)
     except OSError as e:  # tool missing
         return subprocess.CompletedProcess(cmd, 127, "", str(e))
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, 124, "", f"timeout after {kw.get('timeout')}s")
 
 
 def _changed(root, *exts):
@@ -35,7 +37,7 @@ def run_gates(root="."):
     if shutil.which("gitleaks"):
         with tempfile.TemporaryDirectory() as td:
             rep = os.path.join(td, "r.json")
-            r = _run(root, ["gitleaks", "dir", ".", "--no-banner", "--redact", "-r", rep, "-f", "json"])
+            r = _run(root, ["gitleaks", "dir", ".", "--no-banner", "--redact", "-r", rep, "-f", "json"], timeout=120)
             found = json.load(open(rep)) if os.path.exists(rep) and os.path.getsize(rep) else []
             gates["secrets"] = {"ok": r.returncode == 0, "findings": [f"{f['File']}:{f['StartLine']} {f['RuleID']}" for f in found][:10]}
     else:
