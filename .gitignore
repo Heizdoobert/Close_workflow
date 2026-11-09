@@ -15,3 +15,5 @@ __pycache__/
 *.tmp
 .ino_test/
 last_session_result.json
+plans/
+vendor/

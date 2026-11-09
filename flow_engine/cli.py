@@ -6,12 +6,14 @@ import shutil
 import subprocess
 import sys
 
-from flow_engine import __version__, bridge, engine, gate
+from flow_engine import __version__, agents, bridge, engine, gate, plan
 from flow_engine.resp import RedisError
 
 USAGE = ('usage: flow-task "<task message>"      store a task (with FLOW_EXEC=1 also run it)\n'
          '       flow-task enqueue "<message>"   store + queue for the listener, prints the id\n'
-         "       flow-task status <id> | listen | gate [dir] | doctor | exec <id> <message>")
+         "       flow-task status <id> | listen | gate [dir] | doctor | exec <id> <message>\n"
+         '       flow-task plan "<goal>" [--model <your model id>]   draft a plan (nothing runs until approve)\n'
+         "       flow-task show <plan> | approve <plan> [--wait] | reject <plan> | report <plan> | run <plan> | plans")
 
 
 def doctor():
@@ -28,7 +30,7 @@ def doctor():
         add("redis", False, f"{type(e).__name__}: {e}"[:150])
     up = engine.listener_running()
     add("listener", up, "running" if up else "stopped (flow-task listen, or install.py --service)", required=False)
-    add("claude", bool(engine.claude_bin()), engine.claude_bin() or "not found (set FLOW_CLAUDE)")
+    add("claude", bool(agents.claude_bin()), agents.claude_bin() or "not found (set FLOW_CLAUDE)")
     add("gitleaks", bool(shutil.which("gitleaks")), "found" if shutil.which("gitleaks") else "optional: secrets gate skipped", required=False)
     exe = bridge.agent_system()
     add("agent-system", bool(exe), exe or "not found: memory recall/learn disabled", required=False)
@@ -66,7 +68,38 @@ def main(argv=None):
             res = gate.run_gates(rest[0] if rest else ".")
             print(json.dumps(res, ensure_ascii=False))
             return 0 if res["ok"] else 1
+        if cmd == "plan" and rest:
+            model = rest[rest.index("--model") + 1] if "--model" in rest[:-1] else None
+            goal = " ".join(r for i, r in enumerate(rest) if r != "--model" and (i == 0 or rest[i - 1] != "--model"))
+            pid = plan.create(goal, model)
+            print(plan.show(pid))
+            return 0
+        if cmd == "show" and rest:
+            print(plan.show(rest[0]))
+            return 0
+        if cmd == "approve" and rest:
+            out = plan.approve(rest[0], "--wait" in rest)
+            print(out if out != "started" else f"approved: running in the background. Check: flow-task status {rest[0]}")
+            return 0 if out in ("started", "done") else 1
+        if cmd == "reject" and rest:
+            plan.reject(rest[0])
+            return 0
+        if cmd == "run" and rest:
+            out = plan.run(rest[0])
+            print(out)
+            return 0 if out in ("done", "already running") else 1
+        if cmd == "report" and rest:
+            print(plan.report(rest[0]).read_text(encoding="utf-8"))
+            return 0
+        if cmd == "plans":
+            for sf in sorted(plan.plans_dir().glob("*/state.json")):
+                st = json.loads(sf.read_text(encoding="utf-8"))
+                print(f"{st['id']}  {st['status']:<18} {st['goal'][:70]}")
+            return 0
         if cmd == "status" and rest:
+            if (plan.plans_dir() / rest[0] / "state.json").is_file():
+                print(json.dumps(plan.status(rest[0]), ensure_ascii=False))
+                return 0
             print(json.dumps(engine.status(rest[0]), ensure_ascii=False))
             return 0
         if cmd == "enqueue" and rest:
@@ -77,6 +110,9 @@ def main(argv=None):
             print(f"{'done' if ok else 'failed'} task {rest[0]} ({rec['attempts']} attempt(s), ${rec['cost_usd']})")
             return 0 if ok else 1
         tid = engine.submit(a[0])  # anything else is the task message
+    except plan.PlanError as e:
+        print(f"plan error: {e}", file=sys.stderr)
+        return 1
     except (OSError, RedisError) as e:
         print(f"Failed to reach Redis: {e}", file=sys.stderr)
         return 1

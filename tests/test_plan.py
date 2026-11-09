@@ -1,0 +1,180 @@
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import pytest
+
+from flow_engine import engine, plan
+
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="fake binaries are POSIX scripts")
+HERE = Path(__file__).parent
+OSS = "gpt-oss-120b-medium"
+
+
+def sh(cwd, *a):
+    return subprocess.run(a, cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
+
+
+@pytest.fixture
+def env(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    sh(repo, "git", "init", "-q", "-b", "main")
+    (repo / "README.md").write_text("hello\n")
+    sh(repo, "git", "add", "-A")
+    sh(repo, "git", "-c", "user.email=a@b", "-c", "user.name=t", "commit", "-q", "-m", "init")
+    home = tmp_path / "home"
+    home.mkdir()
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "steps.json").write_text("{}")
+    for n, v in dict(FLOW_WORKDIR=str(repo), FLOW_HOME=str(home), FAKE_STATE_DIR=str(state), FAKE_STEPS=str(state / "steps.json"),
+                     FAKE_PLAN=str(state / "plan.json"), FLOW_CLAUDE=str(HERE / "fake_claude.py"), FLOW_AGY=str(HERE / "fake_agy.py"),
+                     FLOW_BACKOFF_BASE="0.001", FLOW_BACKOFF_CAP="0.01", FLOW_PIN_BACKOFF_CAP="0.01", REDIS_PORT="1", FLOW_STALE="1").items():
+        monkeypatch.setenv(n, v)
+    for k in ("FLOW_BACKENDS", "FLOW_PARENT_MODEL", "FLOW_GATE"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setattr(engine, "ROOT", home)
+    monkeypatch.setattr(engine, "LOGS", home / "logs")
+    monkeypatch.setattr(engine, "LOG", home / "logs" / "flow_engine.log")
+
+    class E:
+        pass
+    e = E()
+    e.repo, e.home, e.state = repo, home, state
+    e.main_head = sh(repo, "git", "rev-parse", "HEAD")
+
+    def script(steps, behaviour):
+        (state / "plan.json").write_text(json.dumps({"steps": steps}))
+        (state / "steps.json").write_text(json.dumps(behaviour))
+    e.script = script
+    e.calls = lambda: [l.split("\t") for l in (state / "calls.log").read_text().splitlines()] if (state / "calls.log").exists() else []
+    return e
+
+
+def step(i, deps=(), files=(), acc=""):
+    return {"id": i, "title": f"do {i}", "reason": f"because {i} is needed", "deps": list(deps), "files": list(files), "acceptance": acc, "prompt": f"please do {i}"}
+
+
+def test_validate_rejects_bad_plans():
+    for bad in ({"steps": []}, {"steps": [step("a", deps=["a"])]}, {"steps": [step("a", ["b"]), step("b", ["a"])]},
+                {"steps": [step("a", files=["../x"])]}, {"steps": [step("a", files=["/etc/x"])]}, {"steps": [step("a"), step("a")]},
+                {"steps": [{**step("a"), "reason": ""}]}):
+        with pytest.raises(plan.PlanError):
+            plan.validate(bad)
+    assert plan.validate({"steps": [step("a"), step("b", ["a"])]})
+
+
+def test_end_to_end_parallel_steps_merge_and_evidence(env):
+    env.script([step("s1", files=["a.py"], acc="python3 -c 'import a'"), step("s2", files=["b.py"], acc="python3 -c 'import b'"),
+                step("s3", deps=["s1", "s2"], files=["c.py"], acc="python3 -c 'import a, b, c'")],
+               {"s1": {"files": {"a.py": "A = 1\n"}, "sleep": 1}, "s2": {"files": {"b.py": "B = 2\n"}, "sleep": 1},
+                "s3": {"files": {"c.py": "import a, b\nC = a.A + b.B\n"}}})
+    pid = plan.create("build abc")
+    assert plan.status(pid)["status"] == "awaiting_approval" and "do s1" in plan.show(pid)
+    assert sh(env.repo, "git", "rev-parse", "HEAD") == env.main_head  # drafting touches nothing
+    assert plan.approve(pid, wait_for=True) == "done"
+    ev = {c[1]: float(c[2]) for c in env.calls() if c[0] == "step-start"}
+    end = {c[1]: float(c[2]) for c in env.calls() if c[0] == "step-end"}
+    assert ev["s2"] < end["s1"] and ev["s1"] < end["s2"]            # s1 and s2 really ran at the same time
+    assert ev["s3"] >= max(end["s1"], end["s2"])                       # s3 waited for both
+    assert sh(env.repo, "git", "show", f"flow/{pid}:c.py").startswith("import a, b")
+    assert sh(env.repo, "git", "rev-parse", "HEAD") == env.main_head   # your branch is untouched
+    assert not (env.repo / "a.py").exists()
+    rep = (env.home / "plans" / pid / "report.md").read_text()
+    for needle in ("a.py", "b.py", "c.py", "because s2 is needed", "rc=0", "Kiểm tra tích hợp", "kết quả: OK", f"flow/{pid}"):
+        assert needle in rep, needle
+    assert json.loads((env.home / "plans" / pid / "report.json").read_text())["state"]["status"] == "done"
+
+
+def test_503_storm_is_survived_and_shown_in_the_report(env, monkeypatch):
+    monkeypatch.setenv("FAKE_503_FIRST", "5")
+    monkeypatch.setenv("FLOW_API_RETRIES", "6")
+    env.script([step("s1", files=["a.py"], acc="test -f a.py")], {"s1": {"files": {"a.py": "x=1\n"}}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) == "done"
+    rep = (env.home / "plans" / pid / "report.md").read_text()
+    assert "503" in rep and "retry in" in rep
+
+
+def test_acceptance_failure_is_fed_back_then_passes(env):
+    env.script([step("s1", files=["a.py"], acc="grep -q GOOD a.py")], {"s1": {"files": {"a.py": "BAD\n"}, "fixed_files": {"a.py": "GOOD\n"}}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) == "done"
+    st = json.loads((env.home / "plans" / pid / "state.json").read_text())["steps"]["s1"]
+    assert [a["acceptance"]["ok"] for a in st["attempts"]] == [False, True]
+    assert "FAIL" in (env.home / "plans" / pid / "report.md").read_text()
+
+
+def test_failed_step_skips_dependents_and_plan_is_partial(env, monkeypatch):
+    monkeypatch.setenv("FLOW_RETRIES", "1")
+    env.script([step("s1", files=["a.py"], acc="false"), step("s2", files=["b.py"], acc="test -f b.py"), step("s3", deps=["s1"], files=["c.py"])],
+               {"s1": {"files": {"a.py": "x\n"}}, "s2": {"files": {"b.py": "y\n"}}, "s3": {"files": {"c.py": "z\n"}}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) == "partial"
+    st = plan.status(pid)["steps"]
+    assert st == {"s1": "failed", "s2": "done", "s3": "skipped"}
+    assert sh(env.repo, "git", "ls-tree", "--name-only", f"flow/{pid}").split() == ["README.md", "b.py"]
+    assert "a dependency failed" in (env.home / "plans" / pid / "report.md").read_text()
+
+
+def test_merge_conflict_triggers_rescue_rerun(env):
+    env.script([step("s1"), step("s2")], {"s1": {"files": {"shared.txt": "one\n"}, "sleep": 0.5}, "s2": {"files": {"shared.txt": "two\n"}, "sleep": 0.5}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) == "done"
+    merged = sh(env.repo, "git", "show", f"flow/{pid}:shared.txt")
+    assert "one" in merged and "two" in merged                         # neither step's work was lost
+    assert "cứu" in (env.home / "plans" / pid / "report.md").read_text()
+
+
+def test_gpt_oss_parent_runs_the_whole_plan_on_that_model_only(env, monkeypatch):
+    monkeypatch.setenv("FAKE_AGY_503_FIRST", "5")  # hits the planner and the first step
+    env.script([step("s1", files=["a.py"], acc="test -f a.py"), step("s2", deps=["s1"], files=["b.py"], acc="test -f b.py")],
+               {"s1": {"files": {"a.py": "1\n"}}, "s2": {"files": {"b.py": "2\n"}}})
+    pid = plan.create("g", parent_model=OSS)
+    assert plan.approve(pid, wait_for=True) == "done"
+    calls = env.calls()
+    assert {c[1] for c in calls if c[0] == "agy"} == {OSS}
+    assert not [c for c in calls if c[0] == "claude"]
+    rep = (env.home / "plans" / pid / "report.md").read_text()
+    assert OSS in rep and "same conversation" in rep
+
+
+def test_gpt_oss_dead_key_fails_the_plan_but_never_switches_model(env, monkeypatch):
+    monkeypatch.setenv("FAKE_AGY_DEAD", OSS)
+    env.script([step("s1")], {"s1": {}})
+    with pytest.raises(plan.PlanError, match="planner failed"):
+        plan.create("g", parent_model=OSS)
+    assert {c[1] for c in env.calls()} == {OSS} and len(env.calls()) == 1
+
+
+def test_runner_killed_mid_step_is_resumed_by_the_listener_check(env):
+    env.script([step("s1", files=["a.py"], acc="test -f a.py")], {"s1": {"files": {"a.py": "1\n"}, "sleep": 4}})
+    pid = plan.create("g")
+    assert plan.approve(pid) == "started"
+    sf = env.home / "plans" / pid / "state.json"
+    for _ in range(100):
+        if json.loads(sf.read_text())["steps"]["s1"]["status"] == "running":
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail("step never started")
+    pids = subprocess.run(["pgrep", "-f", f"flow_engine run {pid}"], capture_output=True, text=True).stdout.split()
+    assert pids
+    for p in pids:
+        os.kill(int(p), signal.SIGKILL)
+    time.sleep(2.5)                                                    # heartbeat goes stale (FLOW_STALE=1)
+    assert json.loads(sf.read_text())["status"] == "running"           # the dead runner left it "running"
+    plan.resume_stale()
+    for _ in range(300):
+        if json.loads(sf.read_text())["status"] in ("done", "failed", "partial"):
+            break
+        time.sleep(0.2)
+    st = json.loads(sf.read_text())
+    assert st["status"] == "done", st
+    assert "runner died mid-step" in json.dumps(st["steps"]["s1"]["rescues"])
+    assert sh(env.repo, "git", "show", f"flow/{pid}:a.py") == "1"

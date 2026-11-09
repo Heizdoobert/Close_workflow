@@ -4,7 +4,7 @@
   python install.py                       venv + flow-task + agent-system + Redis (Docker) + MCP registration
   python install.py --service             also start the listener at login (systemd --user / launchd / Task Scheduler)
   python install.py --no-docker           skip containers (point REDIS_HOST/.env at your own Redis)
-  python install.py --agent-system PATH   Agent_system source dir or pip URL (default: ../Agent_system)
+  python install.py --agent-system PATH   Agent_system source dir or pip URL (default: ../Agent_system, else cloned into vendor/)
 """
 import argparse
 import os
@@ -30,6 +30,28 @@ def run(cmd, **kw):
 
 def py(*args):
     return run([BIN / ("python.exe" if WIN else "python"), *args])
+
+
+AGENT_URL = os.environ.get("AGENT_SYSTEM_URL", "https://github.com/Heizdoobert/Agent_update_smart_working.git")
+
+
+def find_agent_src(explicit):
+    """Agent_system source: --agent-system, $AGENT_SYSTEM_SRC, sibling folder, vendor/ (cloned earlier), else clone it now."""
+    for cand in (explicit, os.environ.get("AGENT_SYSTEM_SRC"), ROOT.parent / "Agent_system", ROOT / "vendor" / "Agent_system"):
+        if cand and (Path(cand) / "pyproject.toml").exists():
+            return Path(cand)
+        if cand and "://" in str(cand):
+            return str(cand)
+    if not shutil.which("git"):
+        say("git not found: cannot fetch Agent_system (install git, or pass --agent-system PATH)")
+        return None
+    dest = ROOT / "vendor" / "Agent_system"
+    say(f"cloning Agent_system from {AGENT_URL}")
+    dest.parent.mkdir(exist_ok=True)
+    if run(["git", "clone", "-q", "--depth", "1", AGENT_URL, dest]).returncode != 0:
+        say("clone failed (offline or private repo?): memory and MCP tools stay off; re-run with --agent-system PATH_OR_URL")
+        return None
+    return dest
 
 
 def make_venv():
@@ -151,6 +173,7 @@ def install_service():
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--agent-system", help="Agent_system source dir or pip URL")
+    ap.add_argument("--no-agent-system", action="store_true", help="task engine only")
     ap.add_argument("--no-embed", action="store_true", help="skip fastembed (BM25 memory only)")
     ap.add_argument("--no-docker", action="store_true")
     ap.add_argument("--no-central-log", action="store_true", help="Redis only, no Loki/Grafana")
@@ -159,7 +182,7 @@ def main():
     if sys.version_info < (3, 9):
         sys.exit("Python 3.9+ required")
 
-    src = a.agent_system or os.environ.get("AGENT_SYSTEM_SRC") or (ROOT.parent / "Agent_system" if (ROOT.parent / "Agent_system" / "pyproject.toml").exists() else None)
+    src = None if a.no_agent_system else find_agent_src(a.agent_system)
     central = not a.no_central_log
     make_venv()
     install_packages(src, not a.no_embed)

@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from flow_engine import bridge, cli, engine, gate
+from flow_engine import agents, bridge, cli, engine, gate
 from flow_engine.resp import Redis, RedisError
 
 posix = pytest.mark.skipif(sys.platform == "win32", reason="fake binaries are POSIX scripts")
@@ -71,7 +71,7 @@ def test_execute_without_agent_system_still_works(fake_redis, tmp_path, monkeypa
 
 
 def test_execute_missing_claude_is_recorded(fake_redis, monkeypatch):
-    monkeypatch.setattr(engine, "claude_bin", lambda: None)
+    monkeypatch.setattr(agents, "claude_bin", lambda: None)
     monkeypatch.setattr(bridge, "agent_system", lambda: None)
     ok, rec = engine.execute("79", "x")
     assert not ok and "claude CLI not found" in rec["error"]

@@ -5,11 +5,10 @@ import datetime
 import json
 import os
 import shutil
-import subprocess
 import time
 from pathlib import Path
 
-from flow_engine import bridge, gate
+from flow_engine import agents, bridge, gate
 from flow_engine.resp import Redis
 
 ROOT = Path(os.environ.get("FLOW_HOME") or Path(__file__).resolve().parent.parent)
@@ -73,29 +72,6 @@ def status(tid):
     return d
 
 
-def claude_bin():
-    if os.environ.get("FLOW_CLAUDE"):
-        return os.environ["FLOW_CLAUDE"]
-    real = Path.home() / ".local" / "bin" / "claude.real"  # host binary; plain `claude` may be a Docker wrapper
-    return str(real) if real.exists() else shutil.which("claude")
-
-
-def _claude(prompt, budget, workdir):
-    # ponytail: --setting-sources project + strict MCP + no slash commands cuts a ~125k-token
-    # session preamble to ~7k; add flags back here only if a task needs user plugins/MCP.
-    exe = claude_bin()
-    if not exe:
-        raise FileNotFoundError("claude CLI not found (install it or set FLOW_CLAUDE)")
-    p = subprocess.run(
-        [exe, "-p", "--model", os.environ.get("FLOW_MODEL", "haiku"), "--output-format", "json", "--no-session-persistence",
-         "--max-budget-usd", f"{budget:.2f}", "--setting-sources", "project", "--strict-mcp-config",
-         "--disable-slash-commands", "--tools", os.environ.get("FLOW_TOOLS", "Read,Grep,Glob")],  # read-only by default
-        input=prompt, capture_output=True, text=True, encoding="utf-8", timeout=int(os.environ.get("FLOW_TIMEOUT", "600")), cwd=workdir)
-    out = json.loads(p.stdout)
-    r = [e for e in out if e.get("type") == "result"][-1] if isinstance(out, list) else out
-    return p.returncode == 0 and not r.get("is_error"), r
-
-
 def _failed(gate_out):
     try:
         return [n for n, g in json.loads(gate_out)["gates"].items() if not g["ok"]]
@@ -104,11 +80,12 @@ def _failed(gate_out):
 
 
 def execute(tid, message):
-    """Run one task. FLOW_GATE=1: gate after each attempt, retry with the gate output (FLOW_RETRIES) inside one budget."""
+    """Run one task. FLOW_GATE=1: gate after each attempt, retry with the gate output (FLOW_RETRIES) inside one budget.
+    API trouble (503, 429, timeouts) is retried with backoff and falls over to the next FLOW_BACKENDS entry."""
     workdir = os.environ.get("FLOW_WORKDIR", str(ROOT))
     budget, gated = float(os.environ.get("FLOW_MAX_USD", "0.50")), os.environ.get("FLOW_GATE") == "1"
     retries, model = int(os.environ.get("FLOW_RETRIES", "2")), os.environ.get("FLOW_MODEL", "haiku")
-    key, r_ = f"taskstate:{tid}", redis()
+    chain, key, r_ = agents.chain_from_env(f"claude:{model}"), f"taskstate:{tid}", redis()
 
     def hset(**kv):
         r_.call("HSET", key, *[x for k, v in kv.items() for x in (k, v)])
@@ -118,20 +95,17 @@ def execute(tid, message):
     t0 = time.time()
     rec = {"event": "exec", "task_id": tid, "model": model}
     tok = dict(input_tokens=0, cache_read=0, cache_create=0, output_tokens=0)
-    spent, attempt, ok, r, error, gate_out, first_fail = 0.0, 0, False, {}, None, "", ""
+    spent, attempt, ok, res, gate_out, first_fail, trace = 0.0, 0, False, agents.Result(False), "", "", []
     prompt = bridge.recall(message) + message
     while True:
         attempt += 1
         gate_failed = False
-        try:
-            ok, r = _claude(prompt, max(budget - spent, 0.01), workdir)
-            u = r.get("usage", {})
-            spent += r.get("total_cost_usd", 0)
-            for k, src in (("input_tokens", "input_tokens"), ("cache_read", "cache_read_input_tokens"),
-                           ("cache_create", "cache_creation_input_tokens"), ("output_tokens", "output_tokens")):
-                tok[k] += u.get(src, 0)
-        except Exception as e:  # timeout, bad JSON, missing binary: record, never drop silently
-            ok, error = False, f"{type(e).__name__}: {e}"[:300]
+        o = agents.Opts(workdir, os.environ.get("FLOW_TOOLS", agents.READ_TOOLS), max(budget - spent, 0.01), int(os.environ.get("FLOW_TIMEOUT", "600")))
+        res, cost, tokens = agents.call(chain, prompt, o, trace)
+        spent += cost
+        for k, v in tokens.items():
+            tok[k] = tok.get(k, 0) + v
+        ok = res.ok
         if ok and gated:
             g = gate.run_gates(workdir)
             gate_out = json.dumps(g, ensure_ascii=False)
@@ -141,10 +115,14 @@ def execute(tid, message):
         first_fail = first_fail or gate_out
         prompt = f"{message}\n\nYour previous attempt failed these automated checks. Fix them:\n{gate_out[:1500]}"
 
-    result = (r.get("result") or "")[:4000]
+    result = (res.text or "")[:4000]
     rec.update(status="done" if ok else "failed", duration_ms=int((time.time() - t0) * 1000), cost_usd=round(spent, 6), attempts=attempt, **tok)
-    if error:
-        rec["error"] = error
+    if res.backend:
+        rec["backend"] = res.backend
+    if len(trace) > 1:  # any retry or fallback: keep the evidence
+        rec["api_events"] = len(trace)
+    if not res.ok:
+        rec["error"] = res.error
     if gated and gate_out:
         rec["gate_ok"] = not gate_failed
         if attempt > 1:  # a retry happened: keep the lesson so recall finds it next time
@@ -164,9 +142,9 @@ def _read_task(path):
     return data.decode("utf-8-sig", "replace").strip()
 
 
-def _single_instance():
-    """Hold an OS file lock for the process lifetime (released automatically on crash). None = already running."""
-    f = open(ROOT / ".listener.lock", "a+")
+def try_lock(path):
+    """Hold an OS file lock for the process lifetime (released automatically on crash). None = someone else holds it."""
+    f = open(path, "a+")
     try:
         if os.name == "nt":
             import msvcrt
@@ -176,8 +154,13 @@ def _single_instance():
             import fcntl
             fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
+        f.close()
         return None
     return f
+
+
+def _single_instance():
+    return try_lock(ROOT / ".listener.lock")
 
 
 def listener_running():
@@ -212,10 +195,12 @@ def listen(poll=2.0):
     for d in (INCOMING / "processed", INCOMING / "failed", LOGS):
         d.mkdir(parents=True, exist_ok=True)
     print(f"listener watching {INCOMING}", flush=True)
+    from flow_engine import plan  # late import: plan needs engine
     r = redis()
     try:
         while True:
             # ponytail: tasks run one at a time; add a worker pool if queue depth matters
+            plan.resume_stale()  # a plan runner that died mid-run is restarted here
             for p in sorted(INCOMING.glob("*.txt"), key=lambda p: p.stat().st_mtime):
                 if time.time() - p.stat().st_mtime > 1:  # still being written otherwise
                     _process(p, r)
