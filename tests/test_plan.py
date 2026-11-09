@@ -241,3 +241,46 @@ def test_failure_does_not_overwrite_a_recipe_that_worked(env, monkeypatch):
     st = json.loads((env.home / "plans" / pid / "state.json").read_text())["steps"]["s1"]
     assert st["status"] == "failed" and st["recipe_used"] == "acceptance" and "recipe_recorded" not in st
     assert store["flow-gate:acceptance"] == "worked: use GOOD"
+
+
+def test_plan_targets_the_callers_repo_and_keeps_it_when_approved_elsewhere(env, monkeypatch, tmp_path):
+    monkeypatch.delenv("FLOW_WORKDIR")
+    env.script([step("s1", files=["a.py"], acc="test -f a.py")], {"s1": {"files": {"a.py": "1\n"}}})
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)  # not a git repo: refuse, never fall back to FLOW_SKILL
+    with pytest.raises(plan.PlanError, match="git repo"):
+        plan.create("g")
+    monkeypatch.chdir(env.repo)
+    pid = plan.create("g")
+    assert json.loads((env.home / "plans" / pid / "plan.json").read_text())["repo"] == sh(env.repo, "git", "rev-parse", "--show-toplevel")
+    monkeypatch.chdir(elsewhere)  # another session approves from another folder
+    assert plan.approve(pid, wait_for=True) == "done"
+    assert sh(env.repo, "git", "show", f"flow/{pid}:a.py") == "1"
+
+
+def test_four_plans_at_once_on_one_repo_do_not_collide(env):
+    steps = [step("a", files=["a.py"], acc="test -f a.py"), step("b", files=["b.py"], acc="test -f b.py"), step("c", deps=["a"], files=["c.py"], acc="test -f c.py")]
+    env.script(steps, {s["id"]: {"files": {s["files"][0]: "x\n"}, "sleep": 1.5} for s in steps})
+    pids = [plan.create("g") for _ in range(int(os.environ.get("STRESS_PLANS", "4")))]
+    assert len(set(pids)) == len(pids)
+    for p in pids:
+        assert plan.approve(p) == "started"
+    for _ in range(400):
+        sts = [json.loads((env.home / "plans" / p / "state.json").read_text())["status"] for p in pids]
+        if all(x in ("done", "failed", "partial") for x in sts):
+            break
+        time.sleep(0.25)
+    assert sts == ["done"] * len(pids), [json.loads((env.home / "plans" / p / "state.json").read_text()).get("error") for p in pids]
+    for p in pids:
+        assert sh(env.repo, "git", "show", f"flow/{p}:c.py") == "x"
+    assert sh(env.repo, "git", "rev-parse", "HEAD") == env.main_head and sh(env.repo, "git", "status", "--porcelain") == ""
+    assert not list((env.repo / ".git").rglob("*.lock"))
+
+
+def test_reject_refuses_a_running_plan(env):
+    env.script([step("s1", files=["a.py"], acc="test -f a.py")], {"s1": {"files": {"a.py": "1\n"}}})
+    pid = plan.create("g")
+    plan.approve(pid, wait_for=True)
+    with pytest.raises(plan.PlanError, match="only a plan awaiting"):
+        plan.reject(pid)

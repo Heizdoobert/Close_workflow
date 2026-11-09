@@ -49,7 +49,16 @@ def plans_dir():
 
 
 def repo():
-    return os.environ.get("FLOW_WORKDIR") or str(engine.ROOT)
+    """The project a plan targets: $FLOW_WORKDIR, else the git repo of the caller's cwd (never silently FLOW_SKILL itself)."""
+    if os.environ.get("FLOW_WORKDIR"):
+        return os.environ["FLOW_WORKDIR"]
+    try:
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
+    except OSError:
+        top = ""
+    if not top:
+        raise PlanError("run inside the project's git repo (or set FLOW_WORKDIR)")
+    return top
 
 
 def git(cwd, *a, check=True):
@@ -162,7 +171,7 @@ def create(goal, parent_model=None):
             prompt += f"\n\nYour previous reply was rejected ({e}). Reply with ONLY the corrected JSON object."
     if plan is None:
         raise PlanError("planner did not produce a valid plan")
-    plan = {"goal": goal, "base": git(wd, "rev-parse", "HEAD").stdout.strip(), "steps": plan["steps"]}
+    plan = {"goal": goal, "repo": wd, "base": git(wd, "rev-parse", "HEAD").stdout.strip(), "steps": plan["steps"]}  # repo is fixed here: approving from another cwd must not retarget it
     state = {"id": pid, "status": "awaiting_approval", "goal": goal, "created": engine.now(), "parent_model": parent_model or os.environ.get("FLOW_PARENT_MODEL", ""),
              "plan_cost_usd": round(cost, 6), "plan_trace": trace, "steps": {s["id"]: {"status": "pending"} for s in plan["steps"]}}
     _atomic(d / "plan.json", json.dumps(plan, indent=2, ensure_ascii=False))
@@ -205,6 +214,8 @@ def approve(pid, wait_for=False):
 
 def reject(pid):
     d, plan, state = load(pid)
+    if state["status"] != "awaiting_approval":
+        raise PlanError(f"plan is {state['status']}; only a plan awaiting approval can be rejected")
     state["status"] = "rejected"
     _atomic(d / "state.json", json.dumps(state, indent=2))
     _mirror(pid, status="rejected")
@@ -222,7 +233,7 @@ def status(pid):
 class Ctx:
     def __init__(self, pid, d, plan, state):
         self.pid, self.d, self.plan, self.state = pid, d, plan, state
-        self.repo, self.branch = repo(), f"flow/{pid}"
+        self.repo, self.branch = plan.get("repo") or repo(), f"flow/{pid}"
         self.plan_wt = d / "wt" / "_plan"
         self.slock, self.glock, self.mlock = threading.Lock(), threading.Lock(), threading.Lock()
         self.chain = agents.chain_from_env("claude:haiku", state.get("parent_model"))
