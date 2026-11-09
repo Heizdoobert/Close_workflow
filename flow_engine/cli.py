@@ -14,7 +14,10 @@ USAGE = ('usage: flow-task "<task message>"      store a task (with FLOW_EXEC=1 
          "       flow-task status <id> | listen | gate [dir] | doctor | exec <id> <message>\n"
          '       flow-task plan "<goal>" [--model <your model id>]   draft a plan (nothing runs until approve)\n'
          "       flow-task where [<plan>]   where a plan stands and the next action (default: newest plan of this repo)\n"
-         "       flow-task show <plan> | approve <plan> [--wait] | retry <plan> | reject <plan> | report <plan> | run <plan> | plans")
+         "       flow-task show <plan> | approve <plan> [--wait] | retry <plan> | reject <plan> | report <plan> | run <plan> | plans\n"
+         "       flow-task recover   resume plans whose runner died (no listener needed) and kill their orphan agent groups\n"
+         "       flow-task clean [--older-than DAYS] [--result-branches]   remove finished plans' worktrees and flowstep/* branches (never a running plan)\n"
+         "       flow-task doctor also reports the sandbox (bwrap) and gitleaks lines: a missing one is a warning, not a failure")
 
 
 def doctor_checks():
