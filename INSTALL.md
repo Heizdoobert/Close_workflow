@@ -14,8 +14,7 @@ Two projects, one system:
 ## 1. Install
 
 ```bash
-git clone <FLOW_SKILL repo> FLOW_SKILL
-git clone <Agent_system repo> Agent_system     # sibling folder, found automatically
+git clone <FLOW_SKILL repo> FLOW_SKILL         # this repo only: Agent_system is found next to it, or cloned into vendor/
 cd FLOW_SKILL
 ./install.sh            # Linux / macOS
 ```
@@ -23,7 +22,7 @@ cd FLOW_SKILL
 .\install.ps1           # Windows (PowerShell)
 ```
 
-Flags (same for both): `--service` start the listener at login · `--no-docker` skip containers · `--no-central-log` Redis only, no Loki/Grafana · `--no-embed` BM25 memory only (skips the ~200 MB fastembed download) · `--agent-system PATH_OR_URL` Agent_system elsewhere.
+Flags (same for both): `--service` start the listener at login · `--no-docker` skip containers · `--no-central-log` Redis only, no Loki/Grafana · `--no-embed` BM25 memory only (skips the ~200 MB fastembed download) · `--agent-system PATH_OR_URL` Agent_system elsewhere (`AGENT_SYSTEM_URL` changes the clone source) · `--no-agent-system` task engine only.
 
 What it does, in order: venv → `pip install -e` both projects → `.env` with a random Redis password → `docker compose up -d` → `flow-task` and `agent-system` on PATH (Linux/macOS: symlinks in `~/.local/bin`; Windows: prints one PATH command) → registers the MCP server in Claude Desktop, Cursor, Windsurf, Antigravity → optional listener service (systemd `--user`, launchd, Task Scheduler) → `flow-task doctor`.
 
@@ -44,24 +43,56 @@ echo "task:[check the build]" > incoming_tasks/t.txt   # file drop works too
 
 Task settings (env): `FLOW_MODEL` (haiku) · `FLOW_TOOLS` (read-only `Read,Grep,Glob`; add `Edit,Write,Bash` deliberately) · `FLOW_MAX_USD` · `FLOW_TIMEOUT` · `FLOW_WORKDIR` · `FLOW_GATE=1` run gates after the task and retry on failure (`FLOW_RETRIES`, default 2) · `FLOW_CRITIC=1` add Agent_system's critic as a gate · `FLOW_RECALL=0` / `FLOW_LEARN=0` turn memory off.
 
-## 3. How the two halves talk
+## 3. Agentic flow: give a task, review the plan, review the report
 
 ```
-agent (Claude / Cursor / Antigravity) ──MCP──> agent-system ──flow_task_submit──> flow-task enqueue ──> Redis + incoming_tasks/
-                                                    ▲                                                        │
-                       memory search (recall)  ─────┤                                                  listener runs
-                       memory index  (learn)   ─────┤                                              haiku worker + gates
-                       recipe-record (gate retry)───┴───────────────────────────────────────────────────────┘
+you -> agent (Claude / Antigravity / OpenCode) -> flow_plan_create(goal, model=<its own model id>)   -> plan (steps, files, deps, acceptance cmd)
+you read the plan, say OK        -> flow_plan_approve   -> runner in the background:
+        independent steps run in parallel, each in its own git worktree (flowstep/<plan>/<step>)
+        step passes gates + its acceptance command -> merged into branch flow/<plan>   (your branch is never touched)
+        API error 503/429/timeout -> backoff retry -> next backend;  merge conflict -> step re-run on the merged tree
+        runner killed -> the listener (or `flow-task run <plan>`) resumes where it stopped
+you <- flow_plan_status -> plans/<plan>/report.md : per step  Việc làm / File / Lý do / Bằng chứng
+you: git diff <base>..flow/<plan>   then   git merge flow/<plan>
+```
+
+CLI equivalents: `flow-task plan "<goal>" [--model ID]` · `show <plan>` · `approve <plan> [--wait]` · `reject <plan>` · `status <plan>` · `report <plan>` · `run <plan>` · `plans`. You can edit `plans/<plan>/plan.json` before approving; approval freezes it by hash.
+
+What the report's evidence is: facts the harness collected itself (git diff of each step, gate results, the acceptance command's exit code and output, integration re-run on the merged branch, every API retry/fallback), not the agent's own claims. Agent summaries are shown next to them, clearly separate.
+
+Limits: sub-agents work from the committed HEAD (uncommitted changes in your repo are not seen). The Claude backend limits Bash to an allow-list (`FLOW_BASH_ALLOW`); that is not a sandbox. Approval by an agent over MCP is a protocol (the instruction block tells agents to wait for your OK), not something code can verify: the hard gate is you running `flow-task approve`.
+
+### Model policy (Antigravity)
+Pass your model id when drafting (`--model`, or the MCP `model` argument, or env `FLOW_PARENT_MODEL`). `flow-task` cannot see which model the parent agent runs on, so without it the default chain `claude:haiku` is used.
+
+| Parent model | Sub-agent chain |
+| --- | --- |
+| `gpt-oss-120b-medium` (GPT-OSS 120B) | `agy:<same id>` **pinned**: up to `FLOW_PIN_RETRIES` (10) persistent retries with backoff, the same agy conversation is resumed (`--conversation`), and **never another model**. A permanent error (expired key, bad model id, broken sandbox) fails loudly instead of switching. |
+| `gemini-3.8-flash-*` | GPT-OSS 120B first (persistent retries), and only if it truly cannot be called: the parent's own Flash model, then `gemini-3.8-flash-low` |
+| anything else / none | `FLOW_BACKENDS` (default `claude:haiku`) |
+
+`FLOW_BACKENDS="claude:haiku,claude:sonnet,agy:gpt-oss-120b-medium,opencode"` overrides everything. Spec suffix `!` pins, `+` prefers. `--model` is always passed to agy explicitly. Tuning: `FLOW_API_RETRIES` (3), `FLOW_BACKOFF_BASE/CAP`, `FLOW_PIN_RETRIES`, `FLOW_PIN_BACKOFF_CAP`. Budgets: `FLOW_STEP_USD` (0.40), `FLOW_PLAN_MAX_USD` (3.0), `FLOW_PLAN_USD` (0.30), `FLOW_PARALLEL` (3), `FLOW_MAX_STEPS` (8).
+
+Antigravity runs inside your `agent-sandbox` Docker, which only mounts `/mnt/second_drive` and `/tmp`: keep the repo under one of them. OpenCode: `FLOW_BACKENDS=...,opencode[:provider/model]` works only with a valid OpenCode key.
+
+## 4. How the two halves talk
+
+```
+agent ──MCP──> agent-system ──flow_task_submit / flow_plan_*──> flow-task ──> Redis + incoming_tasks/ + plans/
+                    ▲                                                               │
+       memory search (recall)  ─────────────────────────────────────────────────────┤  listener / runner:
+       memory index  (learn)   ─────────────────────────────────────────────────────┤  sub-agents + gates
+       recipe-record (gate retry) ──────────────────────────────────────────────────┘
 ```
 
 - **FLOW → Agent_system:** before each task `memory search` adds up to 1.2 KB of relevant earlier insights to the prompt; after success the result is indexed; a gate retry records a recipe (`flow-gate:<failed gates>`).
-- **Agent_system → FLOW:** MCP tools `flow_task_submit` and `flow_task_status` hand work to the cheap worker and read the outcome.
+- **Agent_system → FLOW:** MCP tools `flow_task_submit`, `flow_task_status`, `flow_plan_create`, `flow_plan_approve`, `flow_plan_status`.
 
-## 4. Update / uninstall
+## 5. Update / uninstall
 
 Update: `git pull` in both repos and re-run the installer (idempotent; keeps `.env`).
 Uninstall: stop the service (`systemctl --user disable --now flow-listener` / `launchctl unload ~/Library/LaunchAgents/com.flow.listener.plist` / `schtasks /Delete /TN FlowListener /F`), `docker compose down`, delete the folders and `~/.local/bin/{flow-task,agent-system}`. Memory lives in `~/.agent_system/` (set `AGENT_SYSTEM_DB_DIR` to move it).
 
-## 5. Troubleshooting
+## 6. Troubleshooting
 
 `flow-task doctor` names the failing piece. Redis `WRONGPASS` → the container was created with an older `.env`: `docker compose down -v` then re-run the installer. No `claude` found → install Claude Code or set `FLOW_CLAUDE`. Windows: allow script execution with `Set-ExecutionPolicy -Scope Process Bypass` if PowerShell blocks `install.ps1`.

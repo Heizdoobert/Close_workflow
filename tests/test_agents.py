@@ -51,6 +51,8 @@ def test_transient_and_permanent_patterns():
     for t in ("invalid request", "401 invalid api key"):
         assert not agents.TRANSIENT.search(t), t
     assert agents.PERMANENT.search("401 invalid api key") and not agents.PERMANENT.search("503 overloaded")
+    for env_err in ("OCI runtime exec failed: chdir to cwd failed: no such file or directory", "docker daemon not running"):
+        assert agents.PERMANENT.search(env_err)  # environment errors: retrying for minutes cannot help
 
 
 def test_503_is_retried_with_backoff_then_succeeds(fakes, monkeypatch):

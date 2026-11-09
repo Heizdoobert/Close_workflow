@@ -127,7 +127,9 @@ def test_failed_step_skips_dependents_and_plan_is_partial(env, monkeypatch):
     st = plan.status(pid)["steps"]
     assert st == {"s1": "failed", "s2": "done", "s3": "skipped"}
     assert sh(env.repo, "git", "ls-tree", "--name-only", f"flow/{pid}").split() == ["README.md", "b.py"]
-    assert "a dependency failed" in (env.home / "plans" / pid / "report.md").read_text()
+    rep = (env.home / "plans" / pid / "report.md").read_text()
+    assert "a dependency failed" in rep and "chưa commit" in rep and "a.py" in rep   # a failed step still shows what it touched
+    assert json.loads((env.home / "plans" / pid / "state.json").read_text())["integration"]["ok"]
 
 
 def test_merge_conflict_triggers_rescue_rerun(env):
@@ -186,3 +188,12 @@ def test_runner_killed_mid_step_is_resumed_by_the_listener_check(env):
     assert st["status"] == "done", st
     assert "runner died mid-step" in json.dumps(st["steps"]["s1"]["rescues"])
     assert sh(env.repo, "git", "show", f"flow/{pid}:a.py") == "1"
+
+
+def test_nothing_merged_means_no_fake_integration_ok(env, monkeypatch):
+    monkeypatch.setenv("FLOW_RETRIES", "0")
+    env.script([step("s1", files=["a.py"], acc="false")], {"s1": {"files": {"a.py": "x\n"}}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) == "failed"
+    assert json.loads((env.home / "plans" / pid / "state.json").read_text())["integration"] is None
+    assert "Kiểm tra tích hợp" not in (env.home / "plans" / pid / "report.md").read_text()

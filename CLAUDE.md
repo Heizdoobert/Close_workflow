@@ -25,3 +25,8 @@
 - Task run: recall (`agent-system memory search`, <=1.2KB into prompt) -> `claude -p` haiku -> gates if `FLOW_GATE=1` (retry with gate output, `FLOW_RETRIES`, one `FLOW_MAX_USD`; `FLOW_CRITIC=1` adds Agent_system critic) -> on retry `recipe-record flow-gate:<names>` -> on success `memory index`. Turn off with `FLOW_RECALL=0` / `FLOW_LEARN=0`.
 - Agent -> FLOW: MCP tools `flow_task_submit` / `flow_task_status` in Agent_system.
 - Memory: SQLite `~/.agent_system/agent_system.db` (`AGENT_SYSTEM_DB_DIR`), fastembed vectors + BM25. `AGENT_SYSTEM_LLM_PATCH=1` = haiku patcher for `reflect`.
+
+## Agentic plan flow + model policy (Phase 8)
+- `flow-task plan "<goal>" [--model ID]` -> review -> `approve` -> parallel sub-agents in git worktrees (`flowstep/<plan>/<step>`), merged into `flow/<plan>` after gates + acceptance; `plans/<plan>/report.md` = Việc làm / File / Lý do / Bằng chứng. MCP: `flow_plan_create|approve|status`. Code: `flow_engine/plan.py`, `flow_engine/agents.py`.
+- Backends: claude, agy, opencode. 503/429/timeouts: backoff retry, then next backend. Parent `gpt-oss-120b-medium` => pinned (`agy:<id>!`): persistent retries, same conversation, never another model. Parent `gemini-3.8-flash-*` => GPT-OSS 120B first, then lighter. `FLOW_BACKENDS` overrides. Pass the parent's own model id; flow-task cannot detect it.
+- Known: OpenCode key expired (401) as of 2026-11-09; agy sandbox only mounts /mnt/second_drive and /tmp.

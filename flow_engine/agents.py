@@ -29,7 +29,8 @@ BASH_ALLOW = os.environ.get("FLOW_BASH_ALLOW", "Bash(python3:*) Bash(python:*) B
 
 
 # errors no retry can fix: fail loudly instead of looping forever
-PERMANENT = re.compile(r"\b(401|403)\b|api key|unauthori[sz]ed|forbidden|expired|invalid (model|argument)|(model|command) .{0,40}not found|unknown model|unsupported model|billing", re.I)
+PERMANENT = re.compile(r"\b(401|403)\b|api key|unauthori[sz]ed|forbidden|expired|invalid (model|argument)|(model|command) .{0,40}not found|unknown model|unsupported model|billing|"
+                       r"OCI runtime|no such file or directory|exec failed|permission denied|docker daemon|not found in \$PATH", re.I)
 GPT_OSS = "gpt-oss-120b-medium"  # the model id `agy models` lists for GPT-OSS 120B
 
 

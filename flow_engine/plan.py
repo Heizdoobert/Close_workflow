@@ -30,7 +30,7 @@ class PlanError(Exception):
 
 
 PLAN_PROMPT = """You are the planning agent of an automated engineering system. Explore the repository read-only, then reply with ONLY one JSON object, no prose, no code fences:
-{{"steps":[{{"id":"s1","title":"short imperative","reason":"why this step is needed for the goal","deps":[],"files":["relative/paths/this/step/creates/or/edits"],"acceptance":"ONE shell command that exits 0 only if this step is really done (e.g. python3 -m pytest -q tests/test_x.py), run from the repo root","prompt":"self-contained instructions for the engineer doing this step"}}]}}
+{{"steps":[{{"id":"s1","title":"short imperative","reason":"why this step is needed for the goal","deps":[],"files":["relative/paths/this/step/creates/or/edits"],"acceptance":"ONE shell command that exits 0 only if this step is really done (e.g. python3 -m pytest -q tests/test_x.py; always `python3 -m pytest`, never a bare `pytest`), run from the repo root","prompt":"self-contained instructions for the engineer doing this step"}}]}}
 Rules: at most {max} steps. Steps that do not depend on each other run in parallel in separate git worktrees, so give them disjoint files. "deps" lists step ids that must finish first. The acceptance command must verify behaviour, not just that a file exists. Stay inside the repo.
 {ctx}Goal: {goal}"""
 
@@ -311,7 +311,8 @@ def do_step(ctx, step, rescued=False):
         prompt = f"{base_prompt}\n\nYour previous attempt did not pass the automated checks. Fix this:\n{fb}"
     ev.update(summary=summary[:1200], duration_s=round(time.time() - t0, 1))
     if not passed:
-        ev.update(status="failed", error=error or "gates/acceptance still failing after retries")
+        ev["uncommitted"] = git(str(wt), "status", "--porcelain", check=False).stdout.strip().splitlines()[:20]
+        ev.update(status="failed", error=error or "gates/acceptance still failing after retries", worktree=str(wt))
         ctx.save()
         return False
     git(str(wt), *ADD)
@@ -417,8 +418,8 @@ def run(pid):
                     engine.log(json.dumps({"ts": engine.now(), "event": "plan_step", "plan": pid, "step": sid, "status": state["steps"][sid]["status"]}))
                     ctx.save()
         state["duration_s"] = round(state.get("duration_s", 0) + time.time() - t0, 1)
-        state["integration"] = integrate(ctx)
         sts = [v["status"] for v in state["steps"].values()]
+        state["integration"] = integrate(ctx) if "done" in sts else None  # nothing merged = nothing to integrate
         state["status"] = "done" if all(x == "done" for x in sts) and state["integration"]["ok"] else ("partial" if "done" in sts else "failed")
     except Exception as e:
         state.update(status="failed", error=f"{type(e).__name__}: {e}"[:300])
@@ -476,7 +477,8 @@ def report(pid):
     for sid, ev in st["steps"].items():
         s = steps[sid]
         L += ["", f"## [{sid}] {s['title']}: {ev['status']}", f"**Việc làm:** {ev.get('summary') or ev.get('error') or '(không chạy)'}", "", "**File:**"]
-        L += [f"- `{f['status']}` {f['path']} (+{f['added']} -{f['removed']})" for f in ev.get("files", [])] or ["- (không có thay đổi)"]
+        L += [f"- `{f['status']}` {f['path']} (+{f['added']} -{f['removed']})" for f in ev.get("files", [])] or ["- (không có thay đổi đã merge)"]
+        L += [f"- chưa commit trong worktree `{ev.get('worktree')}`: {u}" for u in ev.get("uncommitted", [])]
         if ev.get("outside_plan"):
             L.append(f"- CẢNH BÁO ngoài kế hoạch: {', '.join(ev['outside_plan'])}")
         L += ["", f"**Lý do:** {s['reason']}", "", "**Bằng chứng:**"]
