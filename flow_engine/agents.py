@@ -22,6 +22,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from flow_engine import sandbox
+
 # matched against error text only, never against a successful answer
 TRANSIENT = re.compile(
     r"\b(429|500|502|503|504|529)\b|overload|rate.?limit|capacity|temporar|time[sd]?[ -]?out|ECONNRESET|ECONNREFUSED|"
@@ -179,6 +181,10 @@ def run_claude(model, prompt, o):
            "--setting-sources", "project", "--strict-mcp-config", "--disable-slash-commands", "--tools", o.tools]
     if "Edit" in o.tools or "Write" in o.tools or "Bash" in o.tools:
         cmd += ["--permission-mode", "acceptEdits", "--allowedTools", BASH_ALLOW]
+    if sandbox.available() == "bwrap":
+        cmd = sandbox.wrap(cmd, o.workdir)
+    else:
+        sandbox.warn_no_sandbox()
     try:
         p = _run(cmd, o, stdin=prompt)
     except subprocess.TimeoutExpired:
