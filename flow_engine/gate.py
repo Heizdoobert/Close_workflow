@@ -1,7 +1,8 @@
 """Scripted quality gates (0 LLM tokens). A missing optional tool means its gate falls back or skips, never a silent pass of a real finding.
 
 Gates: secrets (gitleaks, else the built-in regex scan of the added lines), syntax of changed .py/.sh, tests (pytest if tests exist),
-constraints (no weakened bar in the git diff: suppressions, removed or deleted tests, lost asserts), critic (agent-system rules, opt-in FLOW_CRITIC=1).
+constraints (no weakened bar in the git diff: suppressions, removed or deleted tests, lost asserts), blast_radius (a plan step only: no undeclared
+deleted or renamed path, no removed top-level Python def/class that is still referenced), critic (agent-system rules, opt-in FLOW_CRITIC=1).
 """
 
 import json
@@ -113,7 +114,32 @@ def secrets_builtin(root="."):
     return {"ok": not findings, "engine": "builtin", "findings": findings[:10]}
 
 
-def run_gates(root="."):
+DEF = re.compile(r"(?:async\s+def|def|class)\s+([A-Za-z_]\w{2,})")
+
+
+def blast_radius(root, allowed):
+    """Step 5 of the method, as far as code can see it: the diff may not delete or rename a path the step did not declare (`allowed`), nor remove a
+    top-level Python def/class that is still referenced somewhere in the tree (a move to another file is fine). Methods and signatures are not checked."""
+    root = os.path.abspath(root)
+    allowed = set(allowed)
+    gone = []
+    for line in _run(root, ["git", "diff", "--name-status", "-M", "HEAD"]).stdout.splitlines():
+        kind, *paths = line.split("\t")
+        if kind[:1] in ("D", "R") and paths[0] not in allowed and "__pycache__" not in paths[0] and not paths[0].endswith(".pyc"):
+            gone.append(paths[0])
+    readded = {m.group(1) for _f, _n, text in _added_lines(root) if (m := DEF.match(text))}
+    removed = {m.group(1) for l in _run(root, ["git", "diff", "HEAD", "-U0", "-M", "--", "*.py"]).stdout.splitlines() if l.startswith("-") and (m := DEF.match(l[1:]))} - readded
+    orphaned = []
+    for name in sorted(removed):
+        users = _run(root, ["git", "grep", "-l", "-w", "-F", "--untracked", "-e", name, "--", "*.py"]).stdout.split()
+        if users:
+            orphaned.append(f"{name} (removed, still used in {', '.join(users[:3])})")
+    findings = [f"undeclared removal or rename: {p}" for p in gone] + orphaned
+    return {"ok": not findings, "findings": findings[:10]}
+
+
+def run_gates(root=".", allowed=None):
+    """allowed = the files a plan step declared; given, the blast_radius gate runs too."""
     root = os.path.abspath(root)
     gates = {}
 
@@ -141,6 +167,8 @@ def run_gates(root="."):
         gates["tests"] = {"ok": True, "skipped": "no tests found"}
 
     gates["constraints"] = constraints(root)
+    if allowed is not None:
+        gates["blast_radius"] = blast_radius(root, allowed)
 
     if os.environ.get("FLOW_CRITIC") == "1" and bridge.agent_system():
         fails = [f for f in _changed(root, ".py") if bridge.run_agent("critic", "--file", f, cwd=root).returncode]

@@ -58,6 +58,8 @@ you: git diff <base>..flow/<plan>   then   git merge flow/<plan>
 
 CLI equivalents: `flow-task plan "<goal>" [--model ID]` · `show <plan>` · `approve <plan> [--wait]` · `reject <plan>` · `status <plan>` · `report <plan>` · `run <plan>` · `plans`. You can edit `plans/<plan>/plan.json` before approving; approval freezes it by hash.
 
+The planner must also deliver an analysis (research, root cause, approach and rejected alternatives, fix, blast radius, spec: steps 1-6 of the working method); `plan.md` shows it, every step agent is briefed with it, a step may not delete or rename an undeclared path or orphan a still-used function (gate `blast_radius`), and after integration one read-only agent reviews and simplifies the merged diff (`FLOW_REVIEW=0` to skip, `FLOW_REVIEW_USD`). `report.md` ends with a coverage table of all 12 steps that says which were checked by the harness and which are only the model's own statement.
+
 What the report's evidence is: facts the harness collected itself (git diff of each step, gate results, the acceptance command's exit code and output, integration re-run on the merged branch, every API retry/fallback), not the agent's own claims. Agent summaries are shown next to them, clearly separate.
 
 Limits: sub-agents work from the committed HEAD (uncommitted changes in your repo are not seen). The Claude backend limits Bash to an allow-list (`FLOW_BASH_ALLOW`); that is not a sandbox. Approval by an agent over MCP is a protocol (the instruction block tells agents to wait for your OK), not something code can verify: the hard gate is you running `flow-task approve`.

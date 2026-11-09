@@ -22,7 +22,7 @@ import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from flow_engine import agents, bridge, engine, gate, journal
+from flow_engine import agents, bridge, engine, gate, journal, method
 # SECRET_PATTERNS and redact live in secrets.py; they stay importable from here
 from flow_engine.secrets import SECRET_PATTERNS, redact
 
@@ -38,16 +38,19 @@ class PlanError(Exception):
 
 
 PLAN_PROMPT = """You are the planning agent of an automated engineering system. Explore the repository read-only, then reply with ONLY one JSON object, no prose, no code fences:
-{{"steps":[{{"id":"s1","title":"short imperative","reason":"why this step is needed for the goal","deps":[],"files":["relative/paths/this/step/creates/or/edits"],"acceptance":"ONE shell command that exits 0 only if this step is really done (e.g. python3 -m pytest -q tests/test_x.py; always `python3 -m pytest`, never a bare `pytest`), run from the repo root","prompt":"self-contained instructions for the engineer doing this step"}}]}}
+{{{shape},"steps":[{{"id":"s1","title":"short imperative","reason":"why this step is needed for the goal","deps":[],"files":["relative/paths/this/step/creates/or/edits"],"acceptance":"ONE shell command that exits 0 only if this step is really done (e.g. python3 -m pytest -q tests/test_x.py; always `python3 -m pytest`, never a bare `pytest`), run from the repo root","prompt":"self-contained instructions for the engineer doing this step"}}]}}
 Rules: at most {max} steps. Steps that do not depend on each other run in parallel in separate git worktrees, so give them disjoint files. "deps" lists step ids that must finish first. The acceptance command must verify behaviour, not just that a file exists. Stay inside the repo.
+{rules}
 {ctx}Goal: {goal}"""
 
 STEP_PROMPT = """You are a sub-agent doing ONE step of a larger plan, inside an isolated git worktree (your current directory). Do only this step.
 Overall goal: {goal}
+{analysis}
 Your step [{id}] {title}
 Why: {reason}
 Files you are expected to touch: {files}
 Instructions: {prompt}
+Do not rename, move or delete a path, or remove a public function/class other code uses, unless it is in your files list (check callers with Grep first).
 {deps}Acceptance check (it will be run for you afterwards): {acceptance}
 When finished, verify your own work, then reply in 2-4 sentences: what you changed and what the check showed. Do not commit. Do not touch anything outside this directory."""
 EARLIER = "Earlier attempts at this step (do not repeat what failed):"
@@ -186,6 +189,7 @@ def validate(plan, max_steps=None):
 
 def render_md(pid, plan, state):
     out = [f"# Plan {pid}", f"Goal: {plan['goal']}", f"Status: {state['status']}  | base {plan['base'][:8]}  | model: {state.get('parent_model') or 'default'}", ""]
+    out += method.md(plan.get("analysis"))
     if state.get("dirty_files"):
         out += ["WARNING: the repo has uncommitted changes. Steps start from the base commit, so these are NOT part of the plan:"]
         out += [f"  {line}" for line in state["dirty_files"]] + [""]
@@ -224,20 +228,24 @@ def create(goal, parent_model=None):
     d.mkdir(parents=True)
     chain = agents.chain_from_env("claude:haiku", parent_model)
     ctx = bridge.recall(goal)
-    prompt, trace, cost, plan = PLAN_PROMPT.format(max=os.environ.get("FLOW_MAX_STEPS", "8"), ctx=ctx, goal=goal), [], 0.0, None
+    prompt, trace, cost, plan = PLAN_PROMPT.format(max=os.environ.get("FLOW_MAX_STEPS", "8"), shape=method.SHAPE, rules=method.RULES, ctx=ctx, goal=goal), [], 0.0, None
     for _ in range(2):  # one repair round when the reply is not a valid plan
         res, c, _t = agents.call(chain, prompt, agents.Opts(wd, agents.READ_TOOLS, float(os.environ.get("FLOW_PLAN_USD", "0.30")), 300), trace)
         cost += c
         if not res.ok:
             raise PlanError(f"planner failed: {res.error}")
         try:
-            plan = validate(extract_json(res.text))
+            cand = validate(extract_json(res.text))
+            bad = method.problems(cand.get("analysis"), lambda f: git(wd, "cat-file", "-e", f"HEAD:{f}", check=False).returncode == 0)  # research must cite files that exist
+            if bad:
+                raise PlanError("; ".join(bad))
+            plan = cand
             break
         except PlanError as e:
             prompt += f"\n\nYour previous reply was rejected ({e}). Reply with ONLY the corrected JSON object."
     if plan is None:
         raise PlanError("planner did not produce a valid plan")
-    plan = {"goal": goal, "repo": wd, "base": git(wd, "rev-parse", "HEAD").stdout.strip(), "steps": plan["steps"]}  # repo is fixed here: approving from another cwd must not retarget it
+    plan = {"goal": goal, "repo": wd, "base": git(wd, "rev-parse", "HEAD").stdout.strip(), "analysis": method.clean(plan["analysis"]), "steps": plan["steps"]}  # repo is fixed here: approving from another cwd must not retarget it
     if dirty:
         plan["dirty_files"] = dirty[:20]
     state = {"id": pid, "status": "awaiting_approval", "goal": goal, "created": engine.now(), "parent_model": parent_model or os.environ.get("FLOW_PARENT_MODEL", ""),
@@ -570,7 +578,7 @@ def do_step(ctx, step, rescued=False):
     dep_txt = "".join(f"Step [{d}] (already merged into your tree) reported: {done[d].get('summary', '')[:500]}\n" for d in step["deps"] if d in done)
     note = "\nOther steps were merged since you were planned; build on the code that is in this directory now.\n" if rescued else ""
     base_prompt = STEP_PROMPT.format(goal=ctx.plan["goal"], id=sid, title=step["title"], reason=step["reason"], files=", ".join(step["files"]) or "(not specified)",
-                                     prompt=step["prompt"], deps=dep_txt + note, acceptance=step["acceptance"] or "none")
+                                     prompt=step["prompt"], analysis=method.brief(ctx.plan.get("analysis")), deps=dep_txt + note, acceptance=step["acceptance"] or "none")
     base_prompt = bridge.recall(f"{step['title']} {step['prompt'][:200]}") + base_prompt
     # the worktree was just made fresh: an earlier run, retry or rescue of this step left its attempts in the journal, so the agent is told them
     prior = journal.read(ctx.pid, sid)
@@ -601,7 +609,7 @@ def do_step(ctx, step, rescued=False):
         reflection = _reflection(res.text)
         if reflection:
             ev["reflection"] = reflection
-        g = gate.run_gates(str(wt))
+        g = gate.run_gates(str(wt), allowed=step["files"])
         acc = accept(step, str(wt))
         ev["attempts"].append({"n": n, "gates": _gate_line(g), "gates_ok": g["ok"], "acceptance": acc})
         ctx.save()
@@ -767,6 +775,11 @@ def run(pid):
         state["duration_s"] = round(state.get("duration_s", 0) + time.time() - t0, 1)
         sts = [v["status"] for v in state["steps"].values()]
         state["integration"] = integrate(ctx) if "done" in sts else None  # nothing merged = nothing to integrate
+        if "done" in sts:
+            try:
+                state["review"] = review_pass(ctx)
+            except Exception as e:  # advisory: never lose the plan result to it
+                state["review"] = {"status": "not_run", "error": f"{type(e).__name__}: {e}"[:200]}
         state["status"] = "done" if all(x == "done" for x in sts) and state["integration"]["ok"] else ("partial" if "done" in sts else "failed")
     except Exception as e:
         state.update(status="failed", error=f"{type(e).__name__}: {e}"[:300])
@@ -790,6 +803,27 @@ def integrate(ctx):
             checks.append({"step": s["id"], **accept(s, str(ctx.plan_wt))})
     g = gate.run_gates(str(ctx.plan_wt))
     return {"ok": all(c["ok"] for c in checks) and g["ok"], "acceptance": checks, "gates": _gate_line(g), "head": git(ctx.plan_wt, "rev-parse", "--short", "HEAD").stdout.strip()}
+
+
+def review_pass(ctx):
+    """Steps 10-11: one read-only agent call over the merged diff. Advisory: a failure or a finding never changes the plan status."""
+    if os.environ.get("FLOW_REVIEW", "1") != "1":
+        return {"status": "off"}
+    with ctx.slock:
+        cap = min(float(os.environ.get("FLOW_REVIEW_USD", "0.15")), ctx.free())
+    if cap < 0.02:
+        return {"status": "not_run", "error": "plan budget used up"}
+    wt, base = str(ctx.plan_wt), ctx.plan["base"]
+    changed = git(wt, "diff", "--name-only", f"{base}..HEAD").stdout.splitlines()
+    diff = method.cap_diff(git(wt, "diff", f"{base}..HEAD").stdout, int(os.environ.get("FLOW_REVIEW_BYTES", "30000")))
+    res, cost, tok = agents.call(ctx.chain, method.review_prompt(ctx.plan["goal"], (ctx.plan.get("analysis") or {}).get("spec", ""), changed, diff), agents.Opts(wt, agents.READ_TOOLS, cap, 300), [])
+    ctx.add_cost(cost, tok)
+    if not res.ok:
+        return {"status": "not_run", "error": redact(res.error)[:200]}
+    try:
+        return method.parse_review(extract_json(res.text), set(changed))
+    except PlanError as e:
+        return {"status": "not_run", "error": f"review reply unusable: {e}"[:200]}
 
 
 def _epoch(iso):
@@ -855,8 +889,9 @@ def report(pid):
          f"- Chi phí: ${st.get('cost_usd', 0) + st.get('plan_cost_usd', 0):.4f} | thời gian: {st.get('duration_s', '?')}s | plan hash `{st.get('plan_hash', '')}`", ""]
     pt = [e for e in st.get("plan_trace", []) if e["action"] != "done"]
     L += [f"- Lập kế hoạch bởi: {[e['backend'] for e in st.get('plan_trace', []) if e['action'] == 'done']}"] + [f"  - API {e['backend']} lần {e['attempt']}: {e['error'][:120]} → {e['action']}" for e in pt]
-    L += ["",
-         "| Bước | Trạng thái | File | Lần thử | Retry/fallback API |", "|---|---|---|---|---|"]
+    L += ["", "## Phân tích (bước 1-6)", ""] + method.report_md(plan.get("analysis"))
+    L += ["", "## Độ phủ 12 bước", "", "| # | Bước | Kết quả | Bằng chứng |", "|---|---|---|---|"] + [f"| {n} | {name} | {s} | {ev} |" for n, name, s, ev in method.coverage(plan, st)]
+    L += ["", "| Bước | Trạng thái | File | Lần thử | Retry/fallback API |", "|---|---|---|---|---|"]
     for sid, ev in st["steps"].items():
         api = [e for e in ev.get("api", []) if e["action"] != "done"]
         L.append(f"| {sid} {steps[sid]['title']} | {ev['status']} | {len(ev.get('files', []))} | {len(ev.get('attempts', []))} | {len(api)} |")
@@ -896,6 +931,13 @@ def report(pid):
     if integ:
         L += ["", "## Kiểm tra tích hợp (chạy lại trên branch đã merge)", f"- kết quả: {'OK' if integ['ok'] else 'FAIL'}; gates [{integ['gates']}]; head `{integ['head']}`"]
         L += [f"- `{c['cmd']}` ({c['step']}) rc={c.get('rc')} {'OK' if c['ok'] else 'FAIL'}" for c in integ["acceptance"]]
+    rv = st.get("review") or {}
+    if rv.get("status") == "ok":
+        L += ["", "## Review và tinh gọn (agent đọc diff đã merge; chỉ để tham khảo, không tự sửa)"]
+        L += [f"- [{r['severity']}] `{r['file']}:{r['line']}` {r['problem']} → {r['fix']}" for r in rv["review"]] or ["- review: không có phát hiện"]
+        L += [f"- tinh gọn: `{x['file']}` {x['what']}" for x in rv["simplify"]]
+        L += [f"- edge case đã xét: {'; '.join(rv['edge_cases'])}"] if rv["edge_cases"] else []
+        L += [f"- bỏ {rv['dropped']} phát hiện không trỏ vào file trong diff"] if rv.get("dropped") else []
     L += ["", "## Cách review", f"- `git diff {plan['base'][:10]}..flow/{pid}` xem toàn bộ thay đổi", f"- `git merge flow/{pid}` khi đồng ý; `git worktree remove plans/{pid}/wt/_plan` để dọn"]
     (d / "report.md").write_text(redact("\n".join(L) + "\n"), encoding="utf-8")
     _atomic(d / "report.json", redact(json.dumps({"plan": plan, "state": st}, indent=2, ensure_ascii=False)))

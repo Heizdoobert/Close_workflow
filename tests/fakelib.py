@@ -9,6 +9,12 @@ import time
 D = os.environ["FAKE_STATE_DIR"]
 
 
+ANALYSIS = {"research": [{"file": "README.md", "finding": "the repo only holds a readme"}], "root_cause": "nothing implements the goal yet",
+            "approach": "add the files the steps list, one module per step", "alternatives": [{"option": "one big file", "rejected_because": "steps could not run in parallel"}],
+            "fix": "small modules, each checked by its own acceptance command", "blast_radius": {"affected": ["README.md"], "risks": "none: only new files are added"},
+            "spec": "each step writes its file; the acceptance command imports it and checks the value"}
+
+
 def log(*f):
     with open(os.path.join(D, "calls.log"), "a") as fh:
         fh.write("\t".join(str(x) for x in f) + "\n")
@@ -38,7 +44,17 @@ def resolve(prompt):
 def work(prompt):
     """Return the text the 'model' answers; performs the file edits a step asks for in the cwd."""
     if "planning agent" in prompt:
-        return open(os.environ["FAKE_PLAN"]).read()
+        text = open(os.environ["FAKE_PLAN"]).read()
+        try:  # a scripted plan without an analysis block gets a valid one; FAKE_NO_ANALYSIS=1 leaves it out
+            plan = json.loads(text)
+            if "analysis" not in plan and not os.environ.get("FAKE_NO_ANALYSIS"):
+                plan["analysis"] = ANALYSIS
+            return json.dumps(plan)
+        except ValueError:
+            return text
+    if "review and simplification agent" in prompt:
+        log("review")
+        return os.environ.get("FAKE_REVIEW", '{"review":[],"simplify":[],"edge_cases":["empty input"]}')
     m = re.search(r"Your step \[([\w-]+)\]", prompt)
     sid = m.group(1)
     spec = json.load(open(os.environ["FAKE_STEPS"])).get(sid, {})
