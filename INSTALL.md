@@ -1,52 +1,58 @@
-# Hướng dẫn cài đặt tự động và đẩy mã lên GitHub
+# Hướng dẫn cài đặt Close‑Workflow trên Windows
 
-> **Mục tiêu**: Cho phép agent Antigravity tự động cài đặt toàn bộ hệ thống Closed‑Loop Task Engine trên môi trường Windows và đẩy toàn bộ code lên repository GitHub đã cấu hình.
+> **Mục tiêu**: Thiết lập nhanh chóng môi trường Closed‑Loop Task Engine (Claude, Redis, Loki + Grafana) trên Windows và chuẩn bị repo để đẩy lên GitHub.
 
-## 1. Chuẩn bị môi trường
-1. **Git**: Đảm bảo `git` đã được cài đặt và cấu hình credential (HTTPS token hoặc SSH key) để có thể push.
-2. **PowerShell**: Mặc định trên Windows.
-3. **Docker Desktop** (tuỳ chọn): Nếu muốn dùng stack Loki/Grafana, bật Docker và chắc chắn daemon đang chạy.
-4. **Python 3.12+**: Đã có trong môi trường Antigravity.
+## 1. Yêu cầu trước khi cài đặt
+1. **Git** – cài đặt từ https://git-scm.com/download/win và cấu hình credential (HTTPS token hoặc SSH key).  
+2. **PowerShell 5+** – có sẵn trên Windows.
+3. **Docker Desktop** – tải và bật (cần bật *Expose daemon on tcp://localhost:2375* nếu muốn dùng `docker-compose` từ PowerShell).  
+4. **Python 3.12+** – cài đặt từ https://www.python.org/downloads/windows/ (đánh dấu *Add Python to PATH*).
+5. **Antigravity CLI** – đã có trong môi trường (`agy`), không cần cài thêm.
 
-## 2. Tự động cài đặt toàn bộ hệ thống
-Chạy lệnh sau trong PowerShell (đường dẫn tới thư mục dự án):
+## 2. Chuẩn bị thư mục dự án
 ```powershell
 cd D:\04_Tools\Workflow\Close_workflow
-# Đánh dấu các script để chạy được (PowerShell sẽ tự chuyển đổi line endings)
-git -C . add -A
-# Cài đặt môi trường ảo (không bắt buộc nếu đã có Python)
+# Đảm bảo mọi script có line‑ending Windows
+git add -A
+```
+
+## 3. Tạo môi trường ảo và cài phụ thuộc (nếu có)
+```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-# Cài đặt các phụ thuộc nếu có (ở đây chỉ cần Antigravity)
-# Khởi động Docker stack (nếu Docker đang chạy)
-if (Get-Command docker -ErrorAction SilentlyContinue) {
-    docker-compose -f docker-compose.yml up -d
-    docker-compose -f docker-compose-logging.yml up -d
-}
-# Khởi động listener (daemon) và sub‑agent
-python listener.py &
+.\.venv\Scripts\Activate.ps1   # kích hoạt môi trường
+# (Không có phụ thuộc Python riêng, chỉ cần Antigravity đã cài)
+```
+
+## 4. Khởi động Docker stack (Redis, Loki, Grafana)
+```powershell
+# Docker Desktop phải đang chạy
+docker-compose -f docker-compose.yml up -d          # Redis
+docker-compose -f docker-compose-logging.yml up -d   # Loki + Grafana
+```
+> Kiểm tra bằng `docker ps` – các container `redis`, `loki`, `grafana` phải có trạng thái *Up*.
+
+## 5. Chạy listener và định nghĩa sub‑agent
+```powershell
+# Start listener (daemon) – sẽ tự động tạo sub‑agent khi có task
+python listener.py &   # chạy nền
 # Hoặc dùng script PowerShell có sẵn
 ./install.ps1
 ```
-Lệnh trên sẽ:
-- Khởi tạo môi trường Python ảo.
-- Khởi chạy Docker containers (Redis, Loki, Grafana) nếu Docker đang chạy.
-- Khởi động **listener** để lắng nghe `incoming_tasks/`.
-- Định nghĩa sub‑agent `closed_loop_task_engine` (được tự động tạo trong `close_workflow_cli.py`).
+Listener sẽ theo dõi thư mục `incoming_tasks/` và lưu trạng thái vào Redis.
 
-## 3. Đẩy toàn bộ dự án lên GitHub (force)
-Sau khi cài đặt và kiểm tra mọi thứ hoạt động, chạy:
+## 6. Thêm task mẫu
+```powershell
+"tôi có task cho bạn:[Xây API quản lý sản phẩm]" > incoming_tasks/task1.txt
+```
+Listener sẽ tự động xử lý và log vào `logs/`; nếu bật Loki/Grafana, xem tại `http://localhost:3000`.
+
+## 7. Đẩy toàn bộ dự án lên GitHub (force)
 ```powershell
 git add -A
-git commit -m "Automated install & initial push"
+git commit -m "Add Windows install guide (INSTALL.md)"
 git push -u origin main --force
 ```
-Nếu remote repo có nhánh `main` khác, lệnh `--force` sẽ ghi đè toàn bộ lịch sử trên GitHub bằng trạng thái hiện tại của thư mục.
-
-## 4. Kiểm tra
-- Mở https://github.com/Heizdoobert/Close_workflow và xác nhận các file đã được cập nhật.
-- Truy cập `http://localhost:3000` để xem giao diện Grafana (nếu đã bật Docker).
-- Kiểm tra logs trong `logs/` hoặc sử dụng `cw-log` để xem nhật ký runtime.
+Sau lệnh trên, repo https://github.com/Heizdoobert/Close_workflow sẽ chứa toàn bộ code và hướng dẫn cài đặt.
 
 ---
-*File này được tạo để hướng dẫn agent tự động cài đặt và đẩy mã. Bạn có thể chỉnh sửa đường dẫn hoặc tùy chỉnh thêm các bước nếu cần.*
+*File này được tối ưu cho Windows; nếu chạy trên Linux/macOS, thay đổi đường dẫn và dùng `bash` thay cho PowerShell.*
