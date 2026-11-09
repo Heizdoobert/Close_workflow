@@ -1,0 +1,361 @@
+{
+ "uid": "flow-exec-metrics",
+ "title": "Flow Exec Metrics (cost, tokens, latency)",
+ "tags": [
+  "flow",
+  "loki"
+ ],
+ "schemaVersion": 39,
+ "version": 1,
+ "time": {
+  "from": "now-24h",
+  "to": "now"
+ },
+ "refresh": "1m",
+ "templating": {
+  "list": [
+   {
+    "name": "ds",
+    "type": "datasource",
+    "query": "loki",
+    "label": "Loki",
+    "current": {}
+   }
+  ]
+ },
+ "panels": [
+  {
+   "id": 1,
+   "type": "stat",
+   "title": "Tasks executed",
+   "datasource": {
+    "type": "loki",
+    "uid": "${ds}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 6,
+    "h": 4
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "loki",
+      "uid": "${ds}"
+     },
+     "expr": "sum(count_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json [$__range]))",
+     "legendFormat": "",
+     "queryType": "instant",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   }
+  },
+  {
+   "id": 2,
+   "type": "stat",
+   "title": "Failed",
+   "datasource": {
+    "type": "loki",
+    "uid": "${ds}"
+   },
+   "gridPos": {
+    "x": 6,
+    "y": 0,
+    "w": 6,
+    "h": 4
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "loki",
+      "uid": "${ds}"
+     },
+     "expr": "sum(count_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json | status=\"failed\" [$__range]))",
+     "legendFormat": "",
+     "queryType": "instant",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   }
+  },
+  {
+   "id": 3,
+   "type": "stat",
+   "title": "Cost (USD)",
+   "datasource": {
+    "type": "loki",
+    "uid": "${ds}"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 0,
+    "w": 6,
+    "h": 4
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "loki",
+      "uid": "${ds}"
+     },
+     "expr": "sum(sum_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json | unwrap cost_usd [$__range]))",
+     "legendFormat": "",
+     "queryType": "instant",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD"
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   }
+  },
+  {
+   "id": 4,
+   "type": "stat",
+   "title": "Output tokens",
+   "datasource": {
+    "type": "loki",
+    "uid": "${ds}"
+   },
+   "gridPos": {
+    "x": 18,
+    "y": 0,
+    "w": 6,
+    "h": 4
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "loki",
+      "uid": "${ds}"
+     },
+     "expr": "sum(sum_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json | unwrap output_tokens [$__range]))",
+     "legendFormat": "",
+     "queryType": "instant",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   }
+  },
+  {
+   "id": 5,
+   "type": "timeseries",
+   "title": "Cost per interval (USD)",
+   "datasource": {
+    "type": "loki",
+    "uid": "${ds}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 4,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "loki",
+      "uid": "${ds}"
+     },
+     "expr": "sum(sum_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json | unwrap cost_usd [$__interval]))",
+     "legendFormat": "cost",
+     "queryType": "range",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 6,
+   "type": "timeseries",
+   "title": "Tokens per interval",
+   "datasource": {
+    "type": "loki",
+    "uid": "${ds}"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 4,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "loki",
+      "uid": "${ds}"
+     },
+     "expr": "sum(sum_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json | unwrap cache_read [$__interval]))",
+     "legendFormat": "cache read",
+     "queryType": "range",
+     "refId": "A"
+    },
+    {
+     "datasource": {
+      "type": "loki",
+      "uid": "${ds}"
+     },
+     "expr": "sum(sum_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json | unwrap output_tokens [$__interval]))",
+     "legendFormat": "output",
+     "queryType": "range",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 7,
+   "type": "timeseries",
+   "title": "p95 duration (ms)",
+   "datasource": {
+    "type": "loki",
+    "uid": "${ds}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 12,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "loki",
+      "uid": "${ds}"
+     },
+     "expr": "quantile_over_time(0.95, {job=\"flow\"} |= `\"event\": \"exec\"` | json | unwrap duration_ms [$__interval])",
+     "legendFormat": "p95",
+     "queryType": "range",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 8,
+   "type": "timeseries",
+   "title": "Runs by status",
+   "datasource": {
+    "type": "loki",
+    "uid": "${ds}"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 12,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "loki",
+      "uid": "${ds}"
+     },
+     "expr": "sum by (status) (count_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json [$__interval]))",
+     "legendFormat": "{{status}}",
+     "queryType": "range",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 9,
+   "type": "logs",
+   "title": "Recent exec runs",
+   "datasource": {
+    "type": "loki",
+    "uid": "${ds}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 20,
+    "w": 24,
+    "h": 9
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "loki",
+      "uid": "${ds}"
+     },
+     "expr": "{job=\"flow\"} |= `\"event\": \"exec\"` | json",
+     "legendFormat": "",
+     "queryType": "range",
+     "refId": "A"
+    }
+   ],
+   "options": {
+    "sortOrder": "Descending",
+    "wrapLogMessage": true
+   }
+  }
+ ]
+}

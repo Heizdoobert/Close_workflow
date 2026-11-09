@@ -1,0 +1,17 @@
+.env
+*.log
+logs/
+listener.log
+redis/appendonly.aof
+redis/*.rdb
+incoming_tasks/
+.claude/
+__pycache__/
+.venv/
+*.metadata.json
+.listener.lock
+*.egg-info/
+.pytest_cache/
+*.tmp
+.ino_test/
+last_session_result.json

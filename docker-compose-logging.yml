@@ -1,9 +1,12 @@
+version: "3.8"
+
 services:
   loki:
     image: grafana/loki:2.9.5
     container_name: loki
+    restart: unless-stopped
     ports:
-      - "3100:3100"
+      - "127.0.0.1:3100:3100"
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - ./loki/config:/etc/loki
@@ -12,22 +15,27 @@ services:
   promtail:
     image: grafana/promtail:2.9.5
     container_name: promtail
+    restart: unless-stopped
     volumes:
       - ./promtail/config:/etc/promtail
       - ./logs:/var/log/flow_logs
+      - promtail_data:/data
     command: -config.file=/etc/promtail/promtail.yaml
 
   grafana:
     image: grafana/grafana:10.3.1
     container_name: grafana
+    restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
 
 volumes:
   loki_data:
   grafana_data:
+  promtail_data:

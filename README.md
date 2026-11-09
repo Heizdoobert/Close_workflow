@@ -1,30 +1,28 @@
-# Closed‑Loop Task Engine
+# FLOW_SKILL: closed-loop task engine
 
-This folder contains the minimal set of files required to run the **closed‑loop workflow** with Claude, Redis persistence, and optional central logging (Loki + Grafana).
+Drop a task, a cheap Claude worker runs it, state goes to Redis, logs go to Loki/Grafana, and [Agent_system](../Agent_system) gives it memory. Linux, macOS, Windows. **Install: [INSTALL.md](INSTALL.md).**
 
-## Files included
-- `listener.sh` – daemon that watches `incoming_tasks/` and logs detailed output.
-- `run_task.sh` – wrapper that invokes the `closed_loop_task_engine` sub‑agent.
-- `install.sh` – script that spins up Redis and the Loki/Grafana stack, defines the sub‑agent, and starts the listener.
-- `docker-compose.yml` – starts a Redis container.
-- `docker-compose-logging.yml` – starts Loki, Promtail, and Grafana containers (local, free).
-- `loki/config/local-config.yaml` – Loki configuration.
-- `promtail/config/promtail.yaml` – Promtail configuration to ship logs from `logs/*.log` to Loki.
-- `closed_loop_task_engine.json` – sub‑agent definition (Claude model, Redis persistence, optional Arize Phoenix logging).
+```
+flow-task enqueue "task text"  ->  Redis task:<id>  ->  listener  ->  claude -p (haiku, read-only, ~7k tokens)
+                                                                          -> gates (FLOW_GATE=1) -> retry with gate output
+                                                                          -> taskstate:<id>, logs/flow_engine.log -> Promtail -> Loki -> Grafana
+```
 
-## Usage
-1. Make scripts executable:
-   ```bash
-   chmod +x install.sh listener.sh run_task.sh
-   ```
-2. Run the installer (it will start Redis, Loki/Grafana, define the sub‑agent and launch the listener):
-   ```bash
-   ./install.sh
-   ```
-3. Add a task by creating a `.txt` file in `incoming_tasks/`:
-   ```bash
-   echo "tôi có task cho bạn:[Xây API quản lý sản phẩm]" > incoming_tasks/task1.txt
-   ```
-   The listener will automatically process the task, store state in Redis, and push logs to Loki (viewable in Grafana at `http://localhost:3000`).
+## Layout
+- `flow_engine/` stdlib Python core: `resp.py` (Redis client), `engine.py` (tasks, runner, listener), `gate.py` (0-token gates), `bridge.py` (Agent_system recall/learn), `cli.py` (`flow-task`).
+- `install.py` + `install.sh` / `install.ps1` cross-OS installer. `run_task.sh`, `listener.sh` are shims kept for existing `/usr/local/bin/flow-task` and units.
+- `docker-compose.yml` Redis (password from `.env`), `docker-compose-logging.yml` Loki + Promtail + Grafana, `grafana/` dashboards.
+- `tests/` pytest with a fake Redis: `pip install -e . pytest && pytest`.
 
-Feel free to edit the scripts or configuration files to adapt to your environment.
+## Use
+```bash
+flow-task doctor
+flow-task enqueue "summarize README.md"      # or: echo "task:[...]" > incoming_tasks/t.txt
+flow-task status <id>                        # status, cost, tokens, result
+```
+Task ids and state: Redis `task:<id>` (queued payload, 30-day TTL) and `taskstate:<id>` (status running/done/failed, cost, tokens, attempts, result). Failed files go to `incoming_tasks/failed/`.
+
+## Grafana
+`http://localhost:3000` (default login admin/admin: change it), dashboard "Flow Task Engine". LogQL: `{job="flow"}`, cost per task: `{job="flow"} |= "\"event\": \"exec\"" | json | unwrap cost_usd`.
+
+Settings and the Agent_system wiring are in [INSTALL.md](INSTALL.md).
