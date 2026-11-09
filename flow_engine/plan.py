@@ -7,6 +7,7 @@ state.json is the source of truth (Redis is a best-effort mirror), so a crashed 
 journal/<sid>.jsonl keeps one line per attempt, so a retried or resumed step knows what it already tried.
 """
 
+import datetime
 import hashlib
 import json
 import os
@@ -460,6 +461,14 @@ def _attempt_failure(ev):
     return ""
 
 
+def _track_group(ctx, ev, pgid, started):
+    """Record an agent's process group in state.json, so a runner killed mid-call leaves a trail that recover() can follow."""
+    started.append(pgid)
+    with ctx.slock:
+        ev.setdefault("agent_pgids", []).append(pgid)
+    ctx.save()
+
+
 def do_step(ctx, step, rescued=False):
     sid = step["id"]
     wt, br = ctx.d / "wt" / sid, f"flowstep/{ctx.pid}/{sid}"  # not under flow/<pid>/: git refuses a ref that is also a directory
@@ -492,8 +501,11 @@ def do_step(ctx, step, rescued=False):
         if cap <= 0:
             error = f"plan budget ${ctx.budget} exhausted"
             break
-        o = agents.Opts(str(wt), agents.WRITE_TOOLS, cap, int(os.environ.get("FLOW_TIMEOUT", "600")))
+        started = []  # agent process groups this call starts: dropped from state once the call returns
+        o = agents.Opts(str(wt), agents.WRITE_TOOLS, cap, int(os.environ.get("FLOW_TIMEOUT", "600")), on_group=lambda g: _track_group(ctx, ev, g, started))
         res, cost, tok = agents.call(ctx.chain, prompt, o, ev["api"])
+        with ctx.slock:
+            ev["agent_pgids"] = [g for g in ev.get("agent_pgids", []) if g not in started]
         ctx.add_cost(cost, tok, sid)
         ev["backend"] = res.backend or ev.get("backend", "")
         if not res.ok:
@@ -610,6 +622,7 @@ def run(pid):
         return "already running"
     if state["status"] not in ("approved", "running"):
         raise PlanError(f"plan is {state['status']}")
+    _kill_orphans(d, state)  # under the lock: groups a dead runner left behind are not ours to keep
     ctx = Ctx(pid, d, plan, state)
     ctx.plan_wt.parent.mkdir(exist_ok=True)
     if not ctx.plan_wt.exists():
@@ -695,20 +708,58 @@ def integrate(ctx):
     return {"ok": all(c["ok"] for c in checks) and g["ok"], "acceptance": checks, "gates": _gate_line(g), "head": git(ctx.plan_wt, "rev-parse", "--short", "HEAD").stdout.strip()}
 
 
-def resume_stale():
-    """Restart plan runners whose heartbeat stopped (process killed, machine slept) while nobody holds the run lock."""
+def _epoch(iso):
+    return datetime.datetime.fromisoformat(iso).timestamp() if iso else 0.0
+
+
+def _kill_orphans(d, st):
+    """Kill the agent process groups a dead runner left behind, then forget them. Returns how many were killed.
+    Call only while holding the plan's run lock: then no live runner can own these groups."""
+    pgids = [g for ev in st["steps"].values() for g in ev.pop("agent_pgids", [])]
+    if not pgids:
+        return 0
+    killed = sum(agents.kill_orphan_group(g) for g in pgids)
+    _atomic(d / "state.json", json.dumps(st, indent=2, ensure_ascii=False))
+    return killed
+
+
+def _resume_if_dead(d, st, stale):
+    """Restart the runner of a plan that has none: status running or approved, run lock free, heartbeat older than `stale` seconds
+    (an approved plan with no heartbeat counts from its approval). Returns what was done, or None when the plan is alive or finished."""
+    if st["status"] not in ("running", "approved"):
+        return None
+    last = float(st.get("heartbeat") or 0) or _epoch(st.get("approved"))
+    if time.time() - last <= stale:
+        return None
+    lk = engine.try_lock(d / "run.lock")
+    if not lk:
+        return None  # a live runner holds the lock
+    try:
+        killed = _kill_orphans(d, st)
+    finally:
+        lk.close()
+    spawn(st["id"])
+    return f"resumed {st['id']} ({st['status']}, silent for {round(time.time() - last)}s)" + (f"; killed {killed} orphan agent group(s)" if killed else "")
+
+
+def recover():
+    """Resume every plan whose runner died, without the listener. Returns one line per plan acted on (and per failed check)."""
     stale = float(os.environ.get("FLOW_STALE", "120"))
-    for sf in plans_dir().glob("*/state.json"):
+    out = []
+    for sf in sorted(plans_dir().glob("*/state.json")):
         try:
-            st = json.loads(sf.read_text(encoding="utf-8"))
-            if st["status"] == "running" and time.time() - st.get("heartbeat", 0) > stale:
-                lk = engine.try_lock(sf.parent / "run.lock")
-                if lk:
-                    lk.close()
-                    print(f"resuming stale plan {st['id']}", flush=True)
-                    spawn(st["id"])
+            msg = _resume_if_dead(sf.parent, json.loads(sf.read_text(encoding="utf-8")), stale)
         except Exception as e:
-            print(f"resume check failed for {sf.parent.name}: {e}", flush=True)
+            msg = f"recover check failed for {sf.parent.name}: {type(e).__name__}: {e}"
+        if msg:
+            out.append(msg)
+    return out
+
+
+def resume_stale():
+    """Listener check: the same as recover(), printed to the listener log."""
+    for line in recover():
+        print(line, flush=True)
 
 
 def report(pid):

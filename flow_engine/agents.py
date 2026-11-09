@@ -15,11 +15,12 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from flow_engine import sandbox
@@ -59,6 +60,7 @@ class Opts:
     budget: float = 0.50
     timeout: int = 600
     resume: str = ""
+    on_group: object = None  # called with the agent's process group id right after it starts (plan.py records it for recover)
 
 
 def claude_bin():
@@ -148,6 +150,68 @@ def new_group():
     return {"start_new_session": True}
 
 
+# an agent's command line names claude or agy (also the bwrap-wrapped and claude.real forms); a stray "fake_claude.py" does not count
+AGENT_CMD = re.compile(r"(?:^|[\s/])(?:claude|agy)(?:\.real)?(?:\s|$)")
+
+
+def _load_libc():
+    """libc for prctl, loaded once at import: the fork child must not import ctypes (an import lock held by another thread can deadlock it)."""
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        import ctypes
+        return ctypes.CDLL(None, use_errno=True)
+    except Exception:
+        return None
+
+
+_LIBC = _load_libc()
+
+
+def _die_with_runner():
+    """Linux, runs in the child before exec: PR_SET_PDEATHSIG makes the kernel SIGKILL the agent when the thread that forked it exits.
+    That thread is a step thread of the plan runner, alive as long as the runner, so this fires only when the runner dies (SIGKILL, crash).
+    Note: PDEATHSIG is tied to the forking thread, not the process. Step threads live as long as the runner's pool, so this is acceptable.
+    Any failure leaves the old behaviour: no-op."""
+    try:
+        _LIBC.prctl(1, signal.SIGKILL)  # PR_SET_PDEATHSIG = 1
+    except Exception:
+        pass
+
+
+def _group_cmdlines(pgid):
+    """Command lines of the live processes in process group pgid. Group members, not just the leader: once the leader dies, its children stay in the group."""
+    if sys.platform.startswith("linux"):
+        out = []
+        for d in Path("/proc").iterdir():
+            if not d.name.isdigit():
+                continue
+            try:
+                stat = (d / "stat").read_text(errors="replace")
+                if int(stat.rsplit(")", 1)[1].split()[2]) == pgid:  # field 5 (pgrp), after the "(comm)" which may hold spaces
+                    out.append((d / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace"))
+            except (OSError, ValueError, IndexError):
+                continue  # the process exited while we looked
+        return out
+    if os.name == "nt":
+        return []
+    p = subprocess.run(["ps", "-axo", "pgid=,args="], capture_output=True, text=True, errors="replace")
+    return [line.split(None, 1)[1] for line in p.stdout.splitlines() if line.split()[:1] == [str(pgid)] and len(line.split(None, 1)) == 2]
+
+
+def kill_orphan_group(pgid):
+    """SIGKILL an agent process group a dead runner left behind. Only if it still holds an agent: the pgid may have been reused. True if killed."""
+    if os.name == "nt" or pgid <= 1 or pgid == os.getpgrp():
+        return False
+    if not any(AGENT_CMD.search(c) for c in _group_cmdlines(pgid)):
+        return False
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except OSError:
+        return False
+    return True
+
+
 def kill_group(p):
     if os.name == "nt":
         subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], capture_output=True)
@@ -163,7 +227,9 @@ def kill_group(p):
 def _run(cmd, o, stdin=None, env=None):
     with _slot():  # only the subprocess itself holds a slot: backoff sleeps happen outside
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
-                             cwd=o.workdir, env=env, **new_group())
+                             cwd=o.workdir, env=env, preexec_fn=_die_with_runner if sys.platform.startswith("linux") else None, **new_group())
+        if o.on_group:
+            o.on_group(p.pid)  # session leader: its pid is the process group id
         try:
             out, err = p.communicate(stdin, timeout=o.timeout)
         except subprocess.TimeoutExpired:
@@ -338,7 +404,7 @@ def call(chain, prompt, o, trace=None, sleep=time.sleep):
             if retryable and attempt < limit:
                 delay = min(ceiling, base * 2 ** attempt) * (0.5 + random.random() / 2)
                 if res.session:  # agy: continue the same conversation instead of starting over
-                    oo = Opts(o.workdir, o.tools, o.budget, o.timeout, res.session)
+                    oo = replace(o, resume=res.session)
                     prompt_now = "Your previous turn was interrupted by an error. Continue exactly where you stopped and finish the task."
                 trace.append({**ev, "action": f"retry in {delay:.1f}s" + (" (same conversation)" if res.session else "")})
                 sleep(delay)
