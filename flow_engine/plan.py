@@ -28,6 +28,15 @@ ADD = ["add", "-A", "--", ".", ":(exclude,glob)**/__pycache__/**", ":(exclude,gl
 WIN_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
 WIN_BAD_CHARS = re.compile(r'[<>:"|?*]')
 ACCEPT_TAIL_BYTES = 64 * 1024  # per stream; only the last part is kept for the report and the retry prompt
+# likely secrets; masked before anything is written to state, reports or recipes (the goal in plan.json is user input, left as is)
+SECRET_PATTERNS = [
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)"), "[REDACTED]"),
+    (re.compile(r"\bsk-(?:ant-)?[A-Za-z0-9_\-]{12,}"), "[REDACTED]"),
+    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "[REDACTED]"),
+    (re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b"), "[REDACTED]"),
+    (re.compile(r"(?i)(\bbearer\s+)[A-Za-z0-9._~+/\-]{8,}=*"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)((?:api[_-]?key|access[_-]?key|secret[_-]?key|token|secret|password|passwd)[\"']?\s*[:=]\s*[\"']?)[^\s\"',;]{6,}"), r"\1[REDACTED]"),
+]
 
 
 class PlanError(Exception):
@@ -71,6 +80,14 @@ def git(cwd, *a, check=True):
     if check and p.returncode:
         raise PlanError(f"git {' '.join(a[:3])}: {(p.stderr or p.stdout).strip()[:300]}")
     return p
+
+
+def redact(text):
+    """Mask likely secrets (keys, tokens, passwords, private key blocks) in text; the surrounding words stay."""
+    text = "" if text is None else str(text)
+    for rx, repl in SECRET_PATTERNS:
+        text = rx.sub(repl, text)
+    return text
 
 
 def _atomic(path, data):
@@ -279,7 +296,7 @@ class Ctx:
         for _ in range(5):
             try:  # steps mutate their dicts while the heartbeat thread serialises: retry the rare race
                 with self.slock:
-                    _atomic(self.d / "state.json", json.dumps(self.state, indent=2, ensure_ascii=False))
+                    _atomic(self.d / "state.json", redact(json.dumps(self.state, indent=2, ensure_ascii=False)))
                 return
             except RuntimeError:
                 time.sleep(0.05)
@@ -334,7 +351,7 @@ def accept(step, wt):
         except subprocess.TimeoutExpired:
             _kill_group(p)
             return {"cmd": cmd, "ok": False, "rc": None, "tail": "timeout"}
-        tail = (_tail(out) + _tail(err)).strip()[-600:]
+        tail = redact((_tail(out) + _tail(err)).strip())[-600:]
     return {"cmd": cmd, "ok": p.returncode == 0, "rc": p.returncode, "tail": tail}
 
 
@@ -375,10 +392,10 @@ def do_step(ctx, step, rescued=False):
         ctx.add_cost(cost, tok)
         ev["backend"] = res.backend or ev.get("backend", "")
         if not res.ok:
-            error = res.error
-            ev["attempts"].append({"n": n, "agent_error": res.error[:300]})
+            error = redact(res.error)
+            ev["attempts"].append({"n": n, "agent_error": redact(res.error)[:300]})
             break
-        summary = res.text.strip()
+        summary = redact(res.text.strip())
         g = gate.run_gates(str(wt))
         acc = accept(step, str(wt))
         ev["attempts"].append({"n": n, "gates": _gate_line(g), "gates_ok": g["ok"], "acceptance": acc})
@@ -393,10 +410,10 @@ def do_step(ctx, step, rescued=False):
         prompt = f"{base_prompt}\n\nYour previous attempt did not pass the automated checks. Fix this:\n{fb}" + (f"\n\nWorked before for the same failure:\n{hint}" if hint else "")
         if hint:
             ev["recipe_used"] = failed_names
-    ev.update(summary=summary[:1200], duration_s=round(time.time() - t0, 1))
+    ev.update(summary=redact(summary)[:1200], duration_s=round(time.time() - t0, 1))
     # a code-level failure happened: keep the lesson (API errors are not lessons); a failure never overwrites a recipe that worked
     if first_fail and failed_names and (passed or not bridge.get_recipe(failed_names)):
-        bridge.record_recipe(failed_names, f"step '{step['title'][:60]}': {'fixed after' if passed else 'still failing after'} {len(ev['attempts'])} attempts; first failure {first_fail[:300]}")
+        bridge.record_recipe(failed_names, redact(f"step '{step['title'][:60]}': {'fixed after' if passed else 'still failing after'} {len(ev['attempts'])} attempts; first failure {first_fail[:300]}"))
         ev["recipe_recorded"] = failed_names
     if not passed:
         ev["uncommitted"] = git(str(wt), "status", "--porcelain", check=False).stdout.strip().splitlines()[:20]
@@ -599,6 +616,6 @@ def report(pid):
         L += ["", "## Kiểm tra tích hợp (chạy lại trên branch đã merge)", f"- kết quả: {'OK' if integ['ok'] else 'FAIL'}; gates [{integ['gates']}]; head `{integ['head']}`"]
         L += [f"- `{c['cmd']}` ({c['step']}) rc={c.get('rc')} {'OK' if c['ok'] else 'FAIL'}" for c in integ["acceptance"]]
     L += ["", "## Cách review", f"- `git diff {plan['base'][:10]}..flow/{pid}` xem toàn bộ thay đổi", f"- `git merge flow/{pid}` khi đồng ý; `git worktree remove plans/{pid}/wt/_plan` để dọn"]
-    (d / "report.md").write_text("\n".join(L) + "\n", encoding="utf-8")
-    _atomic(d / "report.json", json.dumps({"plan": plan, "state": st}, indent=2, ensure_ascii=False))
+    (d / "report.md").write_text(redact("\n".join(L) + "\n"), encoding="utf-8")
+    _atomic(d / "report.json", redact(json.dumps({"plan": plan, "state": st}, indent=2, ensure_ascii=False)))
     return d / "report.md"

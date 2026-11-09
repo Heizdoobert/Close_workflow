@@ -391,3 +391,67 @@ def test_symlink_pointing_outside_the_worktree_is_detected(tmp_path):
     (wt / "link").symlink_to(outside)
     (wt / "dir_link").symlink_to(tmp_path)
     assert plan.escaping_paths(str(wt), ["ok.py", "inner", "new.py", "link", "dir_link/outside.txt"]) == ["link", "dir_link/outside.txt"]
+
+
+FAKE_KEY = "sk-ant-FAKE1234567890ABCDEF"
+FAKE_AWS = "AKIAFAKEFAKEFAKE1234"
+
+
+def test_redact_masks_each_secret_shape_and_keeps_the_words_around_it():
+    cases = {
+        f"key {FAKE_KEY} here": "key [REDACTED] here",
+        "openai sk-FAKE1234567890ABCDEFGH": "openai [REDACTED]",
+        f"aws {FAKE_AWS} id": "aws [REDACTED] id",
+        "gh ghp_FAKE1234567890ABCDEF ok": "gh [REDACTED] ok",
+        "pat github_pat_FAKE1234567890ABCDEFGH ok": "pat [REDACTED] ok",
+        "Authorization: Bearer FAKEbearerTOKEN123": "Authorization: Bearer [REDACTED]",
+        "api_key = FakeValue123": "api_key = [REDACTED]",
+        '"password": "FakePass987"': '"password": "[REDACTED]"',
+        "-----BEGIN RSA PRIVATE KEY-----\nFAKEKEYMATERIAL\n-----END RSA PRIVATE KEY-----": "[REDACTED]",  # gitleaks:allow fake PEM fixture
+        "-----BEGIN PRIVATE KEY-----\nFAKEKEYMATERIAL": "[REDACTED]",  # truncated block still masked
+        "tokens are fine, the task-runner too": "tokens are fine, the task-runner too",
+    }
+    for raw, want in cases.items():
+        assert plan.redact(raw) == want
+        assert plan.redact(plan.redact(raw)) == want  # idempotent
+    assert plan.redact(None) == ""
+
+
+def test_secret_in_agent_summary_and_acceptance_output_is_redacted_in_state_and_report(env, monkeypatch):
+    real_call = plan.agents.call
+
+    def leaky_call(*args, **kwargs):
+        res, cost, tok = real_call(*args, **kwargs)
+        res.text += f" leaked {FAKE_KEY} and {FAKE_AWS}"
+        return res, cost, tok
+    monkeypatch.setattr(plan.agents, "call", leaky_call)
+    check = f"import sys; sys.stderr.write('password=FakePass987 {FAKE_AWS}\\n'); sys.exit(1)"
+    env.script([step("s1", files=["a.py"], acc=f"{shlex.quote(sys.executable)} -c {shlex.quote(check)}")], {"s1": {"files": {"a.py": "A = 1\n"}}})
+    pid = plan.create("g")
+    plan.approve(pid, wait_for=True)
+    d = env.home / "plans" / pid
+    for name in ("report.md", "report.json", "state.json"):
+        text = (d / name).read_text(encoding="utf-8")
+        assert FAKE_KEY not in text and FAKE_AWS not in text and "FakePass987" not in text, name
+        assert "leaked" in text and "[REDACTED]" in text, name  # the words around the secret survive
+    assert "password=[REDACTED]" in (d / "state.json").read_text(encoding="utf-8")
+    assert json.loads((d / "state.json").read_text(encoding="utf-8"))["steps"]["s1"]["summary"].endswith("leaked [REDACTED] and [REDACTED]")
+
+
+def test_secret_in_failure_recipe_is_redacted_before_it_is_stored(env, monkeypatch):
+    store = {}
+
+    def fake_agent(*args, cwd=None, timeout=60):
+        out = ""
+        if args[:2] == ("memory", "recipe-record"):
+            store[args[3]] = args[5]
+        elif args[:2] == ("memory", "recipe-get"):
+            out = "No recipe found for x."
+        return subprocess.CompletedProcess(args, 0, out, "")
+    monkeypatch.setattr(bridge, "run_agent", fake_agent)
+    check = f"import sys; sys.stderr.write('token={FAKE_AWS}\\n'); sys.exit(1)"
+    env.script([step("s1", files=["a.py"], acc=f"{shlex.quote(sys.executable)} -c {shlex.quote(check)}")], {"s1": {"files": {"a.py": "A = 1\n"}}})
+    pid = plan.create("g")
+    plan.approve(pid, wait_for=True)
+    recipe = store["flow-gate:acceptance"]
+    assert FAKE_AWS not in recipe and "token=[REDACTED]" in recipe and "still failing" in recipe
