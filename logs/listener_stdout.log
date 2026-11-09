@@ -1,0 +1,9 @@
+🔔 Close_workflow Listener is active!
+📂 Watching: D:\04_Tools\Workflow\Close_workflow\incoming_tasks
+📝 Logging:  D:\04_Tools\Workflow\Close_workflow\logs
+🚀 Detected task from install_e2e.txt: tôi có task cho bạn:[install.ps1 e2e]
+📝 Output written to D:\04_Tools\Workflow\Close_workflow\logs\install_e2e_20261107_041213.log
+✅ Moved task to install_e2e.txt
+🚀 Detected task from chat_demo.txt: tôi có task cho bạn:[demo kích hoạt từ chat]
+📝 Output written to D:\04_Tools\Workflow\Close_workflow\logs\chat_demo_20261107_113045.log
+✅ Moved task to chat_demo.txt

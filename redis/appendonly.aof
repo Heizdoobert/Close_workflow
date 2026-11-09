@@ -1,0 +1,1149 @@
+{"ts": 1793940726.490082, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[Xây API quản lý sản phẩm]"}
+{"ts": 1793940726.4912155, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[Xây API quản lý sản phẩm]"}
+{"ts": 1793940726.491325, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793940726.4913914, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793940726.4914517, "action": "SET", "key": "root_cause", "value": "standard_feature_request"}
+{"ts": 1793940726.4915273, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_standard_feature_request", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793940726.4918437, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793940726.4919376, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793940726.4919987, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793940794.417841, "action": "SET", "key": "task_message", "value": "test task"}
+{"ts": 1793940794.4179778, "action": "SET", "key": "research_data", "value": "analyzed_context_for: test task"}
+{"ts": 1793940794.4180787, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793940794.418146, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793940794.418202, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793940794.4182565, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793940794.418315, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793940794.4183655, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793940794.4184246, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793940794.4188526, "action": "SET", "key": "code_ready", "value": false}
+{"ts": 1793940794.418939, "action": "SET", "key": "validated", "value": false}
+{"ts": 1793940794.4189954, "action": "SET", "key": "code_ready", "value": true}
+{"ts": 1793940794.4190462, "action": "SET", "key": "validated", "value": true}
+{"ts": 1793940794.4190922, "action": "SET", "key": "done", "value": true}
+{"ts": 1793940794.4195127, "action": "SET", "key": "task_message", "value": "Test for model gpt-4o-mini"}
+{"ts": 1793940794.4196048, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gpt-4o-mini"}
+{"ts": 1793940794.4196777, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793940794.4197302, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793940794.4197788, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793940794.4198313, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793940794.4198794, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793940794.4199262, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793940794.4199739, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793940794.4203436, "action": "SET", "key": "task_message", "value": "Test for model claude-3-5-sonnet"}
+{"ts": 1793940794.4204247, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model claude-3-5-sonnet"}
+{"ts": 1793940794.4204822, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793940794.420533, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1793940794.4205801, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793940794.4206254, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793940794.4206996, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793940794.4207542, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793940794.4207983, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793940794.4211953, "action": "SET", "key": "task_message", "value": "Test for model gemini-2.0-flash"}
+{"ts": 1793940794.421283, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gemini-2.0-flash"}
+{"ts": 1793940794.4213514, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793940794.4214036, "action": "SET", "key": "active_model", "value": "gemini-2.0-flash"}
+{"ts": 1793940794.4214532, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793940794.4215157, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793940794.4215677, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793940794.421616, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793940794.42166, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793940820.1106653, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[Xây dựng module thanh toán VNPay]"}
+{"ts": 1793940820.1108322, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[Xây dựng module thanh toán VNPay]"}
+{"ts": 1793940820.110935, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793940820.111001, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1793940820.1110575, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793940820.1111107, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793940820.111168, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793940820.1112182, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793940820.111272, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793940887.671283, "action": "SET", "key": "task_message", "value": "tôi có task cho b?n:[T?i uu hóa co s? d? li?u DuckDB]"}
+{"ts": 1793940887.671461, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho b?n:[T?i uu hóa co s? d? li?u DuckDB]"}
+{"ts": 1793940887.6715748, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793940887.6716375, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793940887.671694, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793940887.671748, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793940887.6718068, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793940887.6718569, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793940887.6719034, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793941931.7037876, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[Kiểm tra command global]"}
+{"ts": 1793941931.7039847, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[Kiểm tra command global]"}
+{"ts": 1793941931.7041342, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793941931.7042503, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793941931.7043133, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793941931.7043748, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793941931.704462, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793941931.7045302, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793941931.7045844, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793941935.798086, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[Kiểm tra alias cw]"}
+{"ts": 1793941935.7982385, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[Kiểm tra alias cw]"}
+{"ts": 1793941935.7983413, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793941935.7984028, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1793941935.798458, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793941935.7985096, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793941935.7985635, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793941935.798612, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793941935.7986634, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793941984.527719, "action": "SET", "key": "task_message", "value": "tôi có task:[Thử nghiệm chạy từ thư mục bất kỳ]"}
+{"ts": 1793941984.5279036, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task:[Thử nghiệm chạy từ thư mục bất kỳ]"}
+{"ts": 1793941984.5280147, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793941984.5280852, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793941984.5281453, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793941984.528198, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793941984.528255, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793941984.52831, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793941984.5283594, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793947613.2895315, "action": "SET", "key": "task_message", "value": "tôi có task: [Xây dựng middleware xác thực JWT]"}
+{"ts": 1793947613.2897055, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task: [Xây dựng middleware xác thực JWT]"}
+{"ts": 1793947613.2898169, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793947613.2898855, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793947613.2899466, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793947613.290001, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793947613.290056, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793947613.2901108, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793947613.290162, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793947639.3839202, "action": "SET", "key": "task_message", "value": "tôi có task: [Xây dựng hệ thống cảnh báo Slack]"}
+{"ts": 1793947639.384074, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task: [Xây dựng hệ thống cảnh báo Slack]"}
+{"ts": 1793947639.3841922, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793947639.3842583, "action": "SET", "key": "active_model", "value": "gemini-2.0-flash"}
+{"ts": 1793947639.3843544, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793947639.3844154, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793947639.384479, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793947639.3845437, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793947639.3845994, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793986024.5463343, "action": "SET", "key": "task_message", "value": "Integrate Debugging, System Update, and Memory Management workflows using ThoughtGraph, CriticEngine, SelfReflector, TriModalRouter, and 3-Tier Memory in agent-system v0.4.4"}
+{"ts": 1793986024.5468895, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Integrate Debugging, System Update, and Memory Management workflows using ThoughtGraph, CriticEngine, SelfReflector, TriModalRouter, and 3-Tier Memory in agent-system v0.4.4"}
+{"ts": 1793986024.547003, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793986024.5470698, "action": "SET", "key": "active_model", "value": "flash"}
+{"ts": 1793986024.5471246, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793986024.547175, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793986024.5473802, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793986024.5474741, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793986024.5475388, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793987367.325669, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[hoàn thiện nốt việc kiểm tra hoàn thiện hệ thống này]"}
+{"ts": 1793987367.3260486, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[hoàn thiện nốt việc kiểm tra hoàn thiện hệ thống này]"}
+{"ts": 1793987367.3261998, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793987367.3262775, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793987367.3263414, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793987367.3263977, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793987367.3264563, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793987367.326524, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793987367.3265963, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793987375.0151768, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[hoàn thiện nốt việc kiểm tra hoàn thiện hệ thống này]"}
+{"ts": 1793987375.0154207, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[hoàn thiện nốt việc kiểm tra hoàn thiện hệ thống này]"}
+{"ts": 1793987375.0155559, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793987375.015638, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793987375.0157073, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793987375.0157666, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793987375.0158262, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793987375.0158932, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793987375.0159912, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793987500.9421785, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[hoàn thiện nốt việc kiểm tra hoàn thiện hệ thống này]"}
+{"ts": 1793987500.9424174, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[hoàn thiện nốt việc kiểm tra hoàn thiện hệ thống này]"}
+{"ts": 1793987500.9425998, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793987500.9426773, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793987500.9427474, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793987500.9428093, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793987500.943111, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793987500.94324, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793987500.9433112, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793987502.9544816, "action": "SET", "key": "task_message", "value": "test task"}
+{"ts": 1793987502.9546192, "action": "SET", "key": "research_data", "value": "analyzed_context_for: test task"}
+{"ts": 1793987502.9547095, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793987502.9547653, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793987502.9548244, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793987502.954873, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793987502.9550974, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793987502.9552193, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793987502.9553246, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793987502.9569342, "action": "SET", "key": "code_ready", "value": false}
+{"ts": 1793987502.9570348, "action": "SET", "key": "validated", "value": false}
+{"ts": 1793987502.9571028, "action": "SET", "key": "code_ready", "value": true}
+{"ts": 1793987502.9571567, "action": "SET", "key": "validated", "value": true}
+{"ts": 1793987502.9572046, "action": "SET", "key": "done", "value": true}
+{"ts": 1793987502.9585416, "action": "SET", "key": "task_message", "value": "Test for model gpt-4o-mini"}
+{"ts": 1793987502.95864, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gpt-4o-mini"}
+{"ts": 1793987502.958713, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793987502.958766, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793987502.958813, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793987502.9588614, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793987502.9590056, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793987502.9590964, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793987502.9591494, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793987502.9596987, "action": "SET", "key": "task_message", "value": "Test for model claude-3-5-sonnet"}
+{"ts": 1793987502.9597893, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model claude-3-5-sonnet"}
+{"ts": 1793987502.959871, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793987502.9599273, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1793987502.9599762, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793987502.960054, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793987502.9602149, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793987502.9603026, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793987502.9603527, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793987502.9609663, "action": "SET", "key": "task_message", "value": "Test for model gemini-2.0-flash"}
+{"ts": 1793987502.9610572, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gemini-2.0-flash"}
+{"ts": 1793987502.9611328, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793987502.9611928, "action": "SET", "key": "active_model", "value": "gemini-2.0-flash"}
+{"ts": 1793987502.9612467, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793987502.9612966, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793987502.9614487, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793987502.9615612, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793987502.9616282, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793987521.056673, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[hoàn thiện nốt việc kiểm tra hoàn thiện hệ thống này]"}
+{"ts": 1793987521.0568533, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[hoàn thiện nốt việc kiểm tra hoàn thiện hệ thống này]"}
+{"ts": 1793987521.0569763, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793987521.0570595, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793987521.05713, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793987521.0571957, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793987521.0573804, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793987521.0574913, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793987521.057556, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793988713.1947658, "action": "SET", "key": "task_message", "value": "test task"}
+{"ts": 1793988713.1949584, "action": "SET", "key": "research_data", "value": "analyzed_context_for: test task"}
+{"ts": 1793988713.1950626, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793988713.1951246, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793988713.1951895, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793988713.1952407, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793988713.1954393, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793988713.1955533, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793988713.2016706, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793988713.2035065, "action": "SET", "key": "code_ready", "value": false}
+{"ts": 1793988713.20362, "action": "SET", "key": "validated", "value": false}
+{"ts": 1793988713.203685, "action": "SET", "key": "code_ready", "value": true}
+{"ts": 1793988713.2037346, "action": "SET", "key": "validated", "value": true}
+{"ts": 1793988713.2037828, "action": "SET", "key": "done", "value": true}
+{"ts": 1793988713.2052104, "action": "SET", "key": "plan", "value": {"blast_radius_safe": true}}
+{"ts": 1793988713.2053604, "action": "SET", "key": "code_path", "value": "C:\\Users\\ACER\\AppData\\Local\\Temp\\definitely_missing_artifact.py"}
+{"ts": 1793988713.2083473, "action": "SET", "key": "task_message", "value": "Test for model gpt-4o-mini"}
+{"ts": 1793988713.2085068, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gpt-4o-mini"}
+{"ts": 1793988713.2086074, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793988713.2086713, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793988713.2087355, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793988713.208794, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793988713.2089753, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793988713.209074, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793988713.2206795, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793988713.2214918, "action": "SET", "key": "task_message", "value": "Test for model claude-3-5-sonnet"}
+{"ts": 1793988713.2215993, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model claude-3-5-sonnet"}
+{"ts": 1793988713.2216768, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793988713.2217274, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1793988713.221773, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793988713.2218175, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793988713.2219882, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793988713.2220764, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793988713.238116, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793988713.2392313, "action": "SET", "key": "task_message", "value": "Test for model gemini-2.0-flash"}
+{"ts": 1793988713.2393754, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gemini-2.0-flash"}
+{"ts": 1793988713.239477, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793988713.2395518, "action": "SET", "key": "active_model", "value": "gemini-2.0-flash"}
+{"ts": 1793988713.2396197, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793988713.239684, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793988713.240062, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793988713.2403116, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793988713.246149, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793988713.5752954, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[hoàn thiện nốt việc kiểm tra hoàn thiện hệ thống này]"}
+{"ts": 1793988713.5754912, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[hoàn thiện nốt việc kiểm tra hoàn thiện hệ thống này]"}
+{"ts": 1793988713.5756884, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793988713.5757606, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793988713.5758808, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793988713.575957, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793988713.5762298, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793988713.5763268, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793988713.5903678, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793988825.7880058, "action": "SET", "key": "task_message", "value": "test task"}
+{"ts": 1793988825.7884247, "action": "SET", "key": "research_data", "value": "analyzed_context_for: test task"}
+{"ts": 1793988825.7886667, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793988825.7888324, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793988825.7890003, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793988825.7891617, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793988825.7895315, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793988825.7897456, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793988825.7917397, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793988825.7950115, "action": "SET", "key": "code_ready", "value": false}
+{"ts": 1793988825.7952359, "action": "SET", "key": "validated", "value": false}
+{"ts": 1793988825.7953959, "action": "SET", "key": "code_ready", "value": true}
+{"ts": 1793988825.7958076, "action": "SET", "key": "validated", "value": true}
+{"ts": 1793988825.796101, "action": "SET", "key": "done", "value": true}
+{"ts": 1793988825.7992008, "action": "SET", "key": "plan", "value": {"blast_radius_safe": true}}
+{"ts": 1793988825.7994354, "action": "SET", "key": "code_path", "value": "C:\\Users\\ACER\\AppData\\Local\\Temp\\definitely_missing_artifact.py"}
+{"ts": 1793988825.8023803, "action": "SET", "key": "task_message", "value": "heal test"}
+{"ts": 1793988825.8026817, "action": "SET", "key": "research_data", "value": "analyzed_context_for: heal test"}
+{"ts": 1793988825.8028588, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793988825.8029583, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793988825.8030925, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793988825.8032303, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793988825.8037758, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793988825.8042493, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793988825.8044086, "action": "SET", "key": "review", "value": "failed"}
+{"ts": 1793988825.8047569, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793988825.8049824, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793988825.8051288, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793988825.8083532, "action": "SET", "key": "task_message", "value": "Test for model gpt-4o-mini"}
+{"ts": 1793988825.808588, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gpt-4o-mini"}
+{"ts": 1793988825.808758, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793988825.808883, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793988825.809, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793988825.8090944, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793988825.8095486, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793988825.8098066, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793988825.812672, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793988825.814362, "action": "SET", "key": "task_message", "value": "Test for model claude-3-5-sonnet"}
+{"ts": 1793988825.8145795, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model claude-3-5-sonnet"}
+{"ts": 1793988825.8147542, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793988825.8149784, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1793988825.81512, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793988825.8152454, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793988825.8155801, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793988825.8158083, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793988825.8189821, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793988825.8207893, "action": "SET", "key": "task_message", "value": "Test for model gemini-2.0-flash"}
+{"ts": 1793988825.8210402, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gemini-2.0-flash"}
+{"ts": 1793988825.8212345, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793988825.821387, "action": "SET", "key": "active_model", "value": "gemini-2.0-flash"}
+{"ts": 1793988825.821501, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793988825.8216023, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793988825.8219166, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793988825.8222592, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793988825.82527, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793988826.374115, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[hoàn thiện nốt việc kiểm tra hoàn thiện hệ thống này]"}
+{"ts": 1793988826.3746912, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[hoàn thiện nốt việc kiểm tra hoàn thiện hệ thống này]"}
+{"ts": 1793988826.3750544, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793988826.3752139, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793988826.3753405, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793988826.3754733, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793988826.3760576, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793988826.37647, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793988826.379446, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793990318.4854624, "action": "SET", "key": "task_message", "value": "test task"}
+{"ts": 1793990318.4856985, "action": "SET", "key": "research_data", "value": "analyzed_context_for: test task"}
+{"ts": 1793990318.485886, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793990318.4859877, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793990318.4860723, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793990318.486153, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793990318.4865155, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793990318.4868834, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793990318.4895833, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793990318.49193, "action": "SET", "key": "code_ready", "value": false}
+{"ts": 1793990318.4920971, "action": "SET", "key": "validated", "value": false}
+{"ts": 1793990318.4921963, "action": "SET", "key": "code_ready", "value": true}
+{"ts": 1793990318.492275, "action": "SET", "key": "validated", "value": true}
+{"ts": 1793990318.492349, "action": "SET", "key": "done", "value": true}
+{"ts": 1793990318.4942017, "action": "SET", "key": "plan", "value": {"blast_radius_safe": true}}
+{"ts": 1793990318.4943857, "action": "SET", "key": "code_path", "value": "C:\\Users\\ACER\\AppData\\Local\\Temp\\definitely_missing_artifact.py"}
+{"ts": 1793990318.4963722, "action": "SET", "key": "task_message", "value": "heal test"}
+{"ts": 1793990318.4965663, "action": "SET", "key": "research_data", "value": "analyzed_context_for: heal test"}
+{"ts": 1793990318.4966912, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793990318.4967794, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793990318.4968581, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793990318.497013, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793990318.4978075, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793990318.4980743, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793990318.4982326, "action": "SET", "key": "review", "value": "failed"}
+{"ts": 1793990318.498581, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793990318.4988542, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793990318.499018, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793990318.5012422, "action": "SET", "key": "task_message", "value": "Test for model gpt-4o-mini"}
+{"ts": 1793990318.5014474, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gpt-4o-mini"}
+{"ts": 1793990318.5015802, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793990318.5016732, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793990318.5017834, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793990318.501866, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793990318.5022955, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793990318.5026221, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793990318.5044143, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793990318.5058293, "action": "SET", "key": "task_message", "value": "Test for model claude-3-5-sonnet"}
+{"ts": 1793990318.5060856, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model claude-3-5-sonnet"}
+{"ts": 1793990318.5062535, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793990318.5063598, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1793990318.5064564, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793990318.5065463, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793990318.5068736, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793990318.5071783, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793990318.5092237, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793990318.5105143, "action": "SET", "key": "task_message", "value": "Test for model gemini-2.0-flash"}
+{"ts": 1793990318.510817, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gemini-2.0-flash"}
+{"ts": 1793990318.5109706, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793990318.5110724, "action": "SET", "key": "active_model", "value": "gemini-2.0-flash"}
+{"ts": 1793990318.5111854, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793990318.5112734, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793990318.5115077, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793990318.5116699, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793990318.51349, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793991373.4647832, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[smoke test listener]"}
+{"ts": 1793991373.4649801, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[smoke test listener]"}
+{"ts": 1793991373.4650967, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793991373.4651618, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793991373.4652214, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793991373.4652774, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793991373.4654417, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793991373.4655502, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793991373.4717076, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793991446.857365, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[kiểm tra run_task.ps1 wrapper]"}
+{"ts": 1793991446.85761, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[kiểm tra run_task.ps1 wrapper]"}
+{"ts": 1793991446.8577452, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793991446.8578303, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793991446.8579152, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793991446.857988, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793991446.85825, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793991446.8584054, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793991446.873499, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793991467.8387246, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[verify run_task full]"}
+{"ts": 1793991467.8390913, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[verify run_task full]"}
+{"ts": 1793991467.839258, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793991467.8393555, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793991467.8394482, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793991467.8395305, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793991467.8397696, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793991467.840053, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793991467.854732, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793991485.1656551, "action": "SET", "key": "task_message", "value": "test task"}
+{"ts": 1793991485.1662812, "action": "SET", "key": "research_data", "value": "analyzed_context_for: test task"}
+{"ts": 1793991485.1665838, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793991485.1667535, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793991485.1668916, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793991485.1670203, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793991485.1674063, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793991485.16762, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793991485.1701894, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793991485.17474, "action": "SET", "key": "code_ready", "value": false}
+{"ts": 1793991485.1751866, "action": "SET", "key": "validated", "value": false}
+{"ts": 1793991485.1753883, "action": "SET", "key": "code_ready", "value": true}
+{"ts": 1793991485.1754959, "action": "SET", "key": "validated", "value": true}
+{"ts": 1793991485.1756213, "action": "SET", "key": "done", "value": true}
+{"ts": 1793991485.179518, "action": "SET", "key": "plan", "value": {"blast_radius_safe": true}}
+{"ts": 1793991485.1798272, "action": "SET", "key": "code_path", "value": "C:\\Users\\ACER\\AppData\\Local\\Temp\\definitely_missing_artifact.py"}
+{"ts": 1793991485.184183, "action": "SET", "key": "task_message", "value": "heal test"}
+{"ts": 1793991485.1845734, "action": "SET", "key": "research_data", "value": "analyzed_context_for: heal test"}
+{"ts": 1793991485.1848292, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793991485.1850405, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793991485.1852596, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793991485.1855268, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793991485.186086, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793991485.1865194, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793991485.1867094, "action": "SET", "key": "review", "value": "failed"}
+{"ts": 1793991485.1870348, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793991485.1872993, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793991485.1875095, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793991485.1911771, "action": "SET", "key": "task_message", "value": "Test for model gpt-4o-mini"}
+{"ts": 1793991485.1914518, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gpt-4o-mini"}
+{"ts": 1793991485.1917057, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793991485.191869, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793991485.1919963, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793991485.1921089, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793991485.1926212, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793991485.1929839, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793991485.195594, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793991485.1978183, "action": "SET", "key": "task_message", "value": "Test for model claude-3-5-sonnet"}
+{"ts": 1793991485.1981726, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model claude-3-5-sonnet"}
+{"ts": 1793991485.198556, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793991485.1988544, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1793991485.1991215, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793991485.1992786, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793991485.1995516, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793991485.2000122, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793991485.2022288, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793991485.2046492, "action": "SET", "key": "task_message", "value": "Test for model gemini-2.0-flash"}
+{"ts": 1793991485.2051556, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gemini-2.0-flash"}
+{"ts": 1793991485.2053952, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793991485.2055364, "action": "SET", "key": "active_model", "value": "gemini-2.0-flash"}
+{"ts": 1793991485.2056372, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793991485.2057261, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793991485.2059693, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793991485.2061427, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793991485.2081838, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793993451.6156378, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[roundtrip check ộ ữ ế]"}
+{"ts": 1793993451.6160164, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[roundtrip check ộ ữ ế]"}
+{"ts": 1793993451.6162565, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793993451.6163838, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793993451.6165233, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793993451.6166422, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793993451.6169128, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793993451.6170611, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793993451.633989, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793993563.4856744, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[roundtrip ộ ữ ế]"}
+{"ts": 1793993563.4859834, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[roundtrip ộ ữ ế]"}
+{"ts": 1793993563.4861581, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793993563.486269, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793993563.4864545, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793993563.4866436, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793993563.4871333, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793993563.4873269, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793993563.5057936, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793993566.5274293, "action": "SET", "key": "task_message", "value": "test task"}
+{"ts": 1793993566.5276177, "action": "SET", "key": "research_data", "value": "analyzed_context_for: test task"}
+{"ts": 1793993566.5277739, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793993566.527863, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793993566.5279403, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793993566.5280106, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793993566.5282066, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793993566.5284927, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793993566.5314903, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793993566.533569, "action": "SET", "key": "code_ready", "value": false}
+{"ts": 1793993566.5337338, "action": "SET", "key": "validated", "value": false}
+{"ts": 1793993566.5338364, "action": "SET", "key": "code_ready", "value": true}
+{"ts": 1793993566.5339148, "action": "SET", "key": "validated", "value": true}
+{"ts": 1793993566.533986, "action": "SET", "key": "done", "value": true}
+{"ts": 1793993566.5360734, "action": "SET", "key": "plan", "value": {"blast_radius_safe": true}}
+{"ts": 1793993566.5362792, "action": "SET", "key": "code_path", "value": "C:\\Users\\ACER\\AppData\\Local\\Temp\\definitely_missing_artifact.py"}
+{"ts": 1793993566.539479, "action": "SET", "key": "task_message", "value": "heal test"}
+{"ts": 1793993566.5396855, "action": "SET", "key": "research_data", "value": "analyzed_context_for: heal test"}
+{"ts": 1793993566.5399237, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793993566.5401247, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793993566.5403547, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793993566.540517, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793993566.5408916, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793993566.5410504, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793993566.5411518, "action": "SET", "key": "review", "value": "failed"}
+{"ts": 1793993566.5414617, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793993566.5416996, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793993566.5418558, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793993566.5440528, "action": "SET", "key": "task_message", "value": "Test for model gpt-4o-mini"}
+{"ts": 1793993566.5442462, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gpt-4o-mini"}
+{"ts": 1793993566.5444381, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793993566.5445924, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793993566.5447338, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793993566.5448596, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793993566.5452156, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793993566.5454316, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793993566.547319, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793993566.5484662, "action": "SET", "key": "task_message", "value": "Test for model claude-3-5-sonnet"}
+{"ts": 1793993566.548647, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model claude-3-5-sonnet"}
+{"ts": 1793993566.548817, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793993566.548927, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1793993566.549083, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793993566.549185, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793993566.5494223, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793993566.5495613, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793993566.5524492, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793993566.5546954, "action": "SET", "key": "task_message", "value": "Test for model gemini-2.0-flash"}
+{"ts": 1793993566.5551043, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gemini-2.0-flash"}
+{"ts": 1793993566.5553973, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793993566.5556529, "action": "SET", "key": "active_model", "value": "gemini-2.0-flash"}
+{"ts": 1793993566.5559177, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793993566.5561218, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793993566.5564034, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793993566.5565772, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793993566.5737305, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793993581.4966488, "action": "SET", "key": "task_message", "value": "tôi có task:[verify shim cuối]"}
+{"ts": 1793993581.4969125, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task:[verify shim cuối]"}
+{"ts": 1793993581.497073, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793993581.497175, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793993581.4972692, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793993581.4973562, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793993581.4977403, "action": "SET", "key": "code_path", "value": "D:/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793993581.4979367, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793993581.516674, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793995194.0612233, "action": "SET", "key": "task_message", "value": "tôi"}
+{"ts": 1793995194.0883017, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi"}
+{"ts": 1793995194.1117716, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793995194.1317434, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793995194.1526392, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793995194.171957, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793995194.1953692, "action": "SET", "key": "code_path", "value": null}
+{"ts": 1793995194.2139802, "action": "SET", "key": "validation_pass", "value": false}
+{"ts": 1793995194.242147, "action": "SET", "key": "code_path", "value": null}
+{"ts": 1793995194.257535, "action": "SET", "key": "validation_pass", "value": false}
+{"ts": 1793995194.2806337, "action": "SET", "key": "code_path", "value": null}
+{"ts": 1793995194.2986252, "action": "SET", "key": "validation_pass", "value": false}
+{"ts": 1793995194.3189409, "action": "SET", "key": "code_path", "value": null}
+{"ts": 1793995194.3400974, "action": "SET", "key": "validation_pass", "value": false}
+{"ts": 1793995194.364144, "action": "SET", "key": "code_path", "value": null}
+{"ts": 1793995194.381289, "action": "SET", "key": "validation_pass", "value": false}
+{"ts": 1793995233.3407815, "action": "SET", "key": "task_message", "value": "tôi"}
+{"ts": 1793995233.3475935, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi"}
+{"ts": 1793995233.3707001, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793995233.3922658, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793995233.4123578, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793995233.434673, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793995233.4553363, "action": "SET", "key": "code_path", "value": null}
+{"ts": 1793995233.4726017, "action": "SET", "key": "validation_pass", "value": false}
+{"ts": 1793995233.4952314, "action": "SET", "key": "code_path", "value": null}
+{"ts": 1793995233.516585, "action": "SET", "key": "validation_pass", "value": false}
+{"ts": 1793995233.536133, "action": "SET", "key": "code_path", "value": null}
+{"ts": 1793995233.559246, "action": "SET", "key": "validation_pass", "value": false}
+{"ts": 1793995233.5803525, "action": "SET", "key": "code_path", "value": null}
+{"ts": 1793995233.598825, "action": "SET", "key": "validation_pass", "value": false}
+{"ts": 1793995233.616931, "action": "SET", "key": "code_path", "value": null}
+{"ts": 1793995233.633915, "action": "SET", "key": "validation_pass", "value": false}
+{"ts": 1793995305.916181, "action": "SET", "key": "task_message", "value": "tôi"}
+{"ts": 1793995305.9221303, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi"}
+{"ts": 1793995305.94659, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793995305.968187, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793995305.991902, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793995306.0116708, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793995306.0400906, "action": "SET", "key": "code_path", "value": "/mnt/d/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793995306.055854, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793995306.0772693, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793995356.477698, "action": "SET", "key": "task_message", "value": "tôi có task:[final gate]"}
+{"ts": 1793995356.477995, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task:[final gate]"}
+{"ts": 1793995356.4781573, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793995356.478255, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793995356.4783475, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793995356.478459, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793995356.4789517, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1793995356.4791193, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793995356.4962065, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793998353.13211, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[listener.sh e2e]"}
+{"ts": 1793998353.1634555, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[listener.sh e2e]"}
+{"ts": 1793998353.18086, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793998353.2019942, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793998353.22215, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793998353.2402189, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793998353.269296, "action": "SET", "key": "code_path", "value": "/mnt/d/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793998353.2839677, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793998353.308826, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793998387.1242557, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[listener.sh e2e]"}
+{"ts": 1793998387.129884, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[listener.sh e2e]"}
+{"ts": 1793998387.155229, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793998387.1801429, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793998387.1996784, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793998387.2224605, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793998387.24931, "action": "SET", "key": "code_path", "value": "/mnt/d/04_Tools/Workflow/Close_workflow/generated_api.py"}
+{"ts": 1793998387.2637446, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793998387.2868004, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1793999533.3068225, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[install.ps1 e2e]"}
+{"ts": 1793999533.3072233, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[install.ps1 e2e]"}
+{"ts": 1793999533.307587, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1793999533.307861, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1793999533.3081214, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1793999533.308419, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1793999533.3096683, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1793999533.3101418, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1793999533.3288698, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794000620.7113318, "action": "SET", "key": "task_message", "value": "test task"}
+{"ts": 1794000620.7115045, "action": "SET", "key": "research_data", "value": "analyzed_context_for: test task"}
+{"ts": 1794000620.7116168, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794000620.7116828, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794000620.7117448, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794000620.7118013, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794000620.712384, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794000620.7126615, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794000620.71382, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794000620.715696, "action": "SET", "key": "code_ready", "value": false}
+{"ts": 1794000620.715835, "action": "SET", "key": "validated", "value": false}
+{"ts": 1794000620.7159157, "action": "SET", "key": "code_ready", "value": true}
+{"ts": 1794000620.7159796, "action": "SET", "key": "validated", "value": true}
+{"ts": 1794000620.7160387, "action": "SET", "key": "done", "value": true}
+{"ts": 1794000620.717609, "action": "SET", "key": "plan", "value": {"blast_radius_safe": true}}
+{"ts": 1794000620.7178063, "action": "SET", "key": "code_path", "value": "C:\\Users\\ACER\\AppData\\Local\\Temp\\definitely_missing_artifact.py"}
+{"ts": 1794000620.7197142, "action": "SET", "key": "task_message", "value": "heal test"}
+{"ts": 1794000620.7199244, "action": "SET", "key": "research_data", "value": "analyzed_context_for: heal test"}
+{"ts": 1794000620.7200375, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794000620.7201066, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794000620.7201664, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794000620.7202349, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794000620.7205617, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794000620.7206726, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794000620.7207289, "action": "SET", "key": "review", "value": "failed"}
+{"ts": 1794000620.7213635, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794000620.7214944, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794000620.7215576, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794000620.723256, "action": "SET", "key": "task_message", "value": "Test for model gpt-4o-mini"}
+{"ts": 1794000620.7233868, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gpt-4o-mini"}
+{"ts": 1794000620.7234735, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794000620.7235305, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794000620.7235835, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794000620.723636, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794000620.7239363, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794000620.7240355, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794000620.724976, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794000620.7257423, "action": "SET", "key": "task_message", "value": "Test for model claude-3-5-sonnet"}
+{"ts": 1794000620.725852, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model claude-3-5-sonnet"}
+{"ts": 1794000620.7260141, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794000620.7260818, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1794000620.7261395, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794000620.7261906, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794000620.726506, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794000620.7269795, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794000620.7360313, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794000620.7370253, "action": "SET", "key": "task_message", "value": "Test for model gemini-2.0-flash"}
+{"ts": 1794000620.7371538, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gemini-2.0-flash"}
+{"ts": 1794000620.7372463, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794000620.737306, "action": "SET", "key": "active_model", "value": "gemini-2.0-flash"}
+{"ts": 1794000620.73739, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794000620.7374637, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794000620.737857, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794000620.7380078, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794000620.7572951, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794021942.6224167, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[final gate]"}
+{"ts": 1794021942.6226048, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[final gate]"}
+{"ts": 1794021942.6227145, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794021942.6227953, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794021942.6228623, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794021942.6229157, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794021942.6232264, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794021942.623316, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794021942.6386511, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794021973.8769505, "action": "SET", "key": "task_message", "value": "test task"}
+{"ts": 1794021973.877091, "action": "SET", "key": "research_data", "value": "analyzed_context_for: test task"}
+{"ts": 1794021973.8771806, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794021973.877257, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794021973.8773205, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794021973.8773665, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794021973.8776584, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794021973.877769, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794021973.878599, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794021973.88018, "action": "SET", "key": "code_ready", "value": false}
+{"ts": 1794021973.8802972, "action": "SET", "key": "validated", "value": false}
+{"ts": 1794021973.880367, "action": "SET", "key": "code_ready", "value": true}
+{"ts": 1794021973.8804321, "action": "SET", "key": "validated", "value": true}
+{"ts": 1794021973.8804815, "action": "SET", "key": "done", "value": true}
+{"ts": 1794021973.8819933, "action": "SET", "key": "plan", "value": {"blast_radius_safe": true}}
+{"ts": 1794021973.882157, "action": "SET", "key": "code_path", "value": "C:\\Users\\ACER\\AppData\\Local\\Temp\\definitely_missing_artifact.py"}
+{"ts": 1794021973.8839378, "action": "SET", "key": "task_message", "value": "heal test"}
+{"ts": 1794021973.8841038, "action": "SET", "key": "research_data", "value": "analyzed_context_for: heal test"}
+{"ts": 1794021973.88428, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794021973.8843977, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794021973.884519, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794021973.884613, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794021973.8851218, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794021973.8853042, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794021973.8854616, "action": "SET", "key": "review", "value": "failed"}
+{"ts": 1794021973.8858683, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794021973.8859968, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794021973.8860567, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794021973.888324, "action": "SET", "key": "task_message", "value": "Test for model gpt-4o-mini"}
+{"ts": 1794021973.8885238, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gpt-4o-mini"}
+{"ts": 1794021973.8886597, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794021973.888757, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794021973.8888457, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794021973.8889363, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794021973.8893442, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794021973.8894854, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794021973.890462, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794021973.8913267, "action": "SET", "key": "task_message", "value": "Test for model claude-3-5-sonnet"}
+{"ts": 1794021973.8914661, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model claude-3-5-sonnet"}
+{"ts": 1794021973.8915732, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794021973.8916357, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1794021973.8916886, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794021973.8917387, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794021973.8920262, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794021973.8924446, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794021973.8931508, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794021973.8937993, "action": "SET", "key": "task_message", "value": "Test for model gemini-2.0-flash"}
+{"ts": 1794021973.893893, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gemini-2.0-flash"}
+{"ts": 1794021973.8939676, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794021973.894028, "action": "SET", "key": "active_model", "value": "gemini-2.0-flash"}
+{"ts": 1794021973.8940742, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794021973.894118, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794021973.8944092, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794021973.8945107, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794021973.8951795, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794025845.9969802, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[demo kích hoạt từ chat]"}
+{"ts": 1794025845.9984932, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[demo kích hoạt từ chat]"}
+{"ts": 1794025845.9988985, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794025845.9991174, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794025845.9996057, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794025845.9997895, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794025846.0005343, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794025846.001009, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794025846.018211, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794027238.584351, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[tôi muốn command đơn giản để khởi động sau mỗi lần tắt bật máy]"}
+{"ts": 1794027238.5845578, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[tôi muốn command đơn giản để khởi động sau mỗi lần tắt bật máy]"}
+{"ts": 1794027238.5846848, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794027238.5847576, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794027238.5848224, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794027238.5848827, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794027238.5852506, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794027238.5853705, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794027238.5973427, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794027825.4185243, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[tôi muốn bạn nghiên cứu các điểm đáng chú ý và hệ thống memory này, tìm các điểm không thật, yếu và chưa hoàn thiện để nghiên cứu cách làm cho hệ thống hoạt động tốt và chuẩn production]"}
+{"ts": 1794027825.4194975, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[tôi muốn bạn nghiên cứu các điểm đáng chú ý và hệ thống memory này, tìm các điểm không thật, yếu và chưa hoàn thiện để nghiên cứu cách làm cho hệ thống hoạt động tốt và chuẩn production]"}
+{"ts": 1794027825.4198968, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794027825.420085, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794027825.4202611, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794027825.420439, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794027825.4218767, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794027825.4222322, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794027825.4396656, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794028836.4323993, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[triển khai P1-P2 và Risk Mitigation: atomic write cho generated_api.py, install.ps1 chờ Docker ready với retry/backoff, script backup cho thư mục Workflow không git, traces ghi thật, scratchpad TTL, xóa hardcode path, retention+backup agent_system.db, metrics]"}
+{"ts": 1794028836.432624, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[triển khai P1-P2 và Risk Mitigation: atomic write cho generated_api.py, install.ps1 chờ Docker ready với retry/backoff, script backup cho thư mục Workflow không git, traces ghi thật, scratchpad TTL, xóa hardcode path, retention+backup agent_system.db, metrics]"}
+{"ts": 1794028836.4327617, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794028836.4328356, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794028836.4329047, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794028836.4331005, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794028836.4341097, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794028836.4346902, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794028836.4507236, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794029611.3490736, "action": "SET", "key": "task_message", "value": "test task"}
+{"ts": 1794029611.349645, "action": "SET", "key": "research_data", "value": "analyzed_context_for: test task"}
+{"ts": 1794029611.3500154, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794029611.3502645, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794029611.3505435, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794029611.350829, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794029611.3529954, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794029611.3533704, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794029611.3546999, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794029611.3584967, "action": "SET", "key": "code_ready", "value": false}
+{"ts": 1794029611.3587785, "action": "SET", "key": "validated", "value": false}
+{"ts": 1794029611.3589609, "action": "SET", "key": "code_ready", "value": true}
+{"ts": 1794029611.3592532, "action": "SET", "key": "validated", "value": true}
+{"ts": 1794029611.3594635, "action": "SET", "key": "done", "value": true}
+{"ts": 1794029611.3635995, "action": "SET", "key": "plan", "value": {"blast_radius_safe": true}}
+{"ts": 1794029611.363896, "action": "SET", "key": "code_path", "value": "C:\\Users\\ACER\\AppData\\Local\\Temp\\definitely_missing_artifact.py"}
+{"ts": 1794029611.3675067, "action": "SET", "key": "task_message", "value": "heal test"}
+{"ts": 1794029611.367882, "action": "SET", "key": "research_data", "value": "analyzed_context_for: heal test"}
+{"ts": 1794029611.368982, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794029611.3692958, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794029611.3696163, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794029611.369874, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794029611.371677, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794029611.3722532, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794029611.372601, "action": "SET", "key": "review", "value": "failed"}
+{"ts": 1794029611.374194, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794029611.374566, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794029611.3747518, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794029611.37806, "action": "SET", "key": "task_message", "value": "Test for model gpt-4o-mini"}
+{"ts": 1794029611.3783221, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gpt-4o-mini"}
+{"ts": 1794029611.378518, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794029611.3786607, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794029611.3787956, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794029611.3789294, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794029611.3800228, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794029611.380309, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794029611.3824441, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794029611.3837957, "action": "SET", "key": "task_message", "value": "Test for model claude-3-5-sonnet"}
+{"ts": 1794029611.3842964, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model claude-3-5-sonnet"}
+{"ts": 1794029611.3845124, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794029611.3846319, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1794029611.3847256, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794029611.3848138, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794029611.3859072, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794029611.3863804, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794029611.400823, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794029611.403359, "action": "SET", "key": "task_message", "value": "Test for model gemini-2.0-flash"}
+{"ts": 1794029611.4039402, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gemini-2.0-flash"}
+{"ts": 1794029611.404186, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794029611.404538, "action": "SET", "key": "active_model", "value": "gemini-2.0-flash"}
+{"ts": 1794029611.404814, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794029611.4051476, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794029611.406571, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794029611.406965, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794029611.409181, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794030502.504182, "action": "SET", "key": "task_message", "value": "tôi có task cho bạn:[verify atomic write]"}
+{"ts": 1794030502.5049355, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi có task cho bạn:[verify atomic write]"}
+{"ts": 1794030502.5052485, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794030502.5054445, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794030502.5056186, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794030502.5057874, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794030502.5068502, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794030502.5071034, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794030502.5239198, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794033705.9053817, "action": "SET", "key": "task_message", "value": "test task"}
+{"ts": 1794033705.9057393, "action": "SET", "key": "research_data", "value": "analyzed_context_for: test task"}
+{"ts": 1794033705.905864, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794033705.905928, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794033705.905988, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794033705.9060407, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794033705.9066682, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794033705.9067757, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794033705.9238575, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794033705.9263008, "action": "SET", "key": "code_ready", "value": false}
+{"ts": 1794033705.9264696, "action": "SET", "key": "validated", "value": false}
+{"ts": 1794033705.9265509, "action": "SET", "key": "code_ready", "value": true}
+{"ts": 1794033705.9266074, "action": "SET", "key": "validated", "value": true}
+{"ts": 1794033705.926657, "action": "SET", "key": "done", "value": true}
+{"ts": 1794033705.927825, "action": "SET", "key": "plan", "value": {"blast_radius_safe": true}}
+{"ts": 1794033705.9280348, "action": "SET", "key": "code_path", "value": "C:\\Users\\ACER\\AppData\\Local\\Temp\\definitely_missing_artifact.py"}
+{"ts": 1794033705.9291523, "action": "SET", "key": "task_message", "value": "heal test"}
+{"ts": 1794033705.9292626, "action": "SET", "key": "research_data", "value": "analyzed_context_for: heal test"}
+{"ts": 1794033705.9293454, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794033705.9293988, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794033705.9294474, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794033705.9294922, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794033705.9301252, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794033705.9302478, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794033705.9303095, "action": "SET", "key": "review", "value": "failed"}
+{"ts": 1794033705.9310794, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794033705.9311843, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794033705.9312449, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794033705.932359, "action": "SET", "key": "task_message", "value": "Test for model gpt-4o-mini"}
+{"ts": 1794033705.9324684, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gpt-4o-mini"}
+{"ts": 1794033705.932558, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794033705.932609, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794033705.9326642, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794033705.93271, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794033705.933322, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794033705.9334278, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794033705.9430091, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794033705.9437058, "action": "SET", "key": "task_message", "value": "Test for model claude-3-5-sonnet"}
+{"ts": 1794033705.9438205, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model claude-3-5-sonnet"}
+{"ts": 1794033705.9439304, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794033705.9439893, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1794033705.9440517, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794033705.9441192, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794033705.9446573, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794033705.9447749, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794033705.9503336, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794033705.9510267, "action": "SET", "key": "task_message", "value": "Test for model gemini-2.0-flash"}
+{"ts": 1794033705.9511313, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gemini-2.0-flash"}
+{"ts": 1794033705.9512324, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794033705.951294, "action": "SET", "key": "active_model", "value": "gemini-2.0-flash"}
+{"ts": 1794033705.9513595, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794033705.9514098, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794033705.9519877, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794033705.9521081, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794033705.9643214, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794035073.9860194, "action": "SET", "key": "task_message", "value": "test task"}
+{"ts": 1794035073.9863558, "action": "SET", "key": "research_data", "value": "analyzed_context_for: test task"}
+{"ts": 1794035073.9864736, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794035073.986541, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794035073.9865975, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794035073.986647, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794035073.987418, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794035073.987618, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794035073.9890227, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794035073.990492, "action": "SET", "key": "code_ready", "value": false}
+{"ts": 1794035073.9906094, "action": "SET", "key": "validated", "value": false}
+{"ts": 1794035073.9906762, "action": "SET", "key": "code_ready", "value": true}
+{"ts": 1794035073.990726, "action": "SET", "key": "validated", "value": true}
+{"ts": 1794035073.9907742, "action": "SET", "key": "done", "value": true}
+{"ts": 1794035073.9924405, "action": "SET", "key": "plan", "value": {"blast_radius_safe": true}}
+{"ts": 1794035073.9925745, "action": "SET", "key": "code_path", "value": "C:\\Users\\ACER\\AppData\\Local\\Temp\\definitely_missing_artifact.py"}
+{"ts": 1794035073.9937267, "action": "SET", "key": "task_message", "value": "heal test"}
+{"ts": 1794035073.9938564, "action": "SET", "key": "research_data", "value": "analyzed_context_for: heal test"}
+{"ts": 1794035073.9939415, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794035073.994003, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794035073.9940572, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794035073.9941046, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794035073.9946344, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794035073.9947374, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794035073.994794, "action": "SET", "key": "review", "value": "failed"}
+{"ts": 1794035073.9952092, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794035073.9953027, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794035073.9953578, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794035073.9965558, "action": "SET", "key": "task_message", "value": "Test for model gpt-4o-mini"}
+{"ts": 1794035073.9966614, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gpt-4o-mini"}
+{"ts": 1794035073.9967415, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794035073.9967947, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794035073.9968777, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794035073.9969347, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794035073.9973989, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794035073.9975383, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794035073.9986053, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794035073.9991577, "action": "SET", "key": "task_message", "value": "Test for model claude-3-5-sonnet"}
+{"ts": 1794035073.9992516, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model claude-3-5-sonnet"}
+{"ts": 1794035073.9993443, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794035073.9993958, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1794035073.9994476, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794035073.9995067, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794035074.0001438, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794035074.0002615, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794035074.0177233, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794035074.01836, "action": "SET", "key": "task_message", "value": "Test for model gemini-2.0-flash"}
+{"ts": 1794035074.0184667, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gemini-2.0-flash"}
+{"ts": 1794035074.0185416, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794035074.0185947, "action": "SET", "key": "active_model", "value": "gemini-2.0-flash"}
+{"ts": 1794035074.018652, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794035074.0187004, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794035074.0193677, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794035074.0194995, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794035074.0207767, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794035768.6759644, "action": "SET", "key": "task_message", "value": "test task"}
+{"ts": 1794035768.6761074, "action": "SET", "key": "research_data", "value": "analyzed_context_for: test task"}
+{"ts": 1794035768.6762042, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794035768.676265, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794035768.67632, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794035768.6763718, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794035768.6769636, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794035768.6771224, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794035768.6785262, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794035768.6799304, "action": "SET", "key": "code_ready", "value": false}
+{"ts": 1794035768.680043, "action": "SET", "key": "validated", "value": false}
+{"ts": 1794035768.680114, "action": "SET", "key": "code_ready", "value": true}
+{"ts": 1794035768.6801662, "action": "SET", "key": "validated", "value": true}
+{"ts": 1794035768.6802127, "action": "SET", "key": "done", "value": true}
+{"ts": 1794035768.6813977, "action": "SET", "key": "plan", "value": {"blast_radius_safe": true}}
+{"ts": 1794035768.6816273, "action": "SET", "key": "code_path", "value": "C:\\Users\\ACER\\AppData\\Local\\Temp\\definitely_missing_artifact.py"}
+{"ts": 1794035768.6828477, "action": "SET", "key": "task_message", "value": "heal test"}
+{"ts": 1794035768.6829665, "action": "SET", "key": "research_data", "value": "analyzed_context_for: heal test"}
+{"ts": 1794035768.6830497, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794035768.6831112, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794035768.6831605, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794035768.68321, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794035768.6836836, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794035768.683795, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794035768.6838558, "action": "SET", "key": "review", "value": "failed"}
+{"ts": 1794035768.6843152, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794035768.684407, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794035768.6844592, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794035768.685605, "action": "SET", "key": "task_message", "value": "Test for model gpt-4o-mini"}
+{"ts": 1794035768.685731, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gpt-4o-mini"}
+{"ts": 1794035768.685813, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794035768.685867, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794035768.68592, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794035768.6859667, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794035768.6865158, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794035768.686671, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794035768.687804, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794035768.688352, "action": "SET", "key": "task_message", "value": "Test for model claude-3-5-sonnet"}
+{"ts": 1794035768.6884577, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model claude-3-5-sonnet"}
+{"ts": 1794035768.688534, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794035768.688585, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1794035768.688632, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794035768.6886845, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794035768.6891878, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794035768.6892843, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794035768.6899767, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794035768.6904688, "action": "SET", "key": "task_message", "value": "Test for model gemini-2.0-flash"}
+{"ts": 1794035768.6905577, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gemini-2.0-flash"}
+{"ts": 1794035768.6906252, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794035768.690673, "action": "SET", "key": "active_model", "value": "gemini-2.0-flash"}
+{"ts": 1794035768.6907191, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794035768.690763, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794035768.6912482, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794035768.6913528, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794035768.692047, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794039887.2909222, "action": "SET", "key": "task_message", "value": "test task"}
+{"ts": 1794039887.2918017, "action": "SET", "key": "research_data", "value": "analyzed_context_for: test task"}
+{"ts": 1794039887.2920332, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794039887.2922008, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794039887.2923748, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794039887.2925375, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794039887.2941208, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794039887.294394, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794039887.2959874, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794039887.2988515, "action": "SET", "key": "code_ready", "value": false}
+{"ts": 1794039887.2990882, "action": "SET", "key": "validated", "value": false}
+{"ts": 1794039887.2992585, "action": "SET", "key": "code_ready", "value": true}
+{"ts": 1794039887.2994153, "action": "SET", "key": "validated", "value": true}
+{"ts": 1794039887.2995694, "action": "SET", "key": "done", "value": true}
+{"ts": 1794039887.3014255, "action": "SET", "key": "plan", "value": {"blast_radius_safe": true}}
+{"ts": 1794039887.302404, "action": "SET", "key": "code_path", "value": "C:\\Users\\ACER\\AppData\\Local\\Temp\\definitely_missing_artifact.py"}
+{"ts": 1794039887.3069003, "action": "SET", "key": "task_message", "value": "heal test"}
+{"ts": 1794039887.3074155, "action": "SET", "key": "research_data", "value": "analyzed_context_for: heal test"}
+{"ts": 1794039887.3077998, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794039887.3081021, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794039887.3084035, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794039887.3088043, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794039887.3109026, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794039887.3114145, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794039887.3117793, "action": "SET", "key": "review", "value": "failed"}
+{"ts": 1794039887.3167639, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794039887.3182623, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794039887.3186765, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794039887.323143, "action": "SET", "key": "task_message", "value": "Test for model gpt-4o-mini"}
+{"ts": 1794039887.323554, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gpt-4o-mini"}
+{"ts": 1794039887.3238049, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794039887.32401, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794039887.3242128, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794039887.3244066, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794039887.325861, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794039887.3266542, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794039887.3416226, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794039887.3435462, "action": "SET", "key": "task_message", "value": "Test for model claude-3-5-sonnet"}
+{"ts": 1794039887.343858, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model claude-3-5-sonnet"}
+{"ts": 1794039887.3441586, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794039887.34439, "action": "SET", "key": "active_model", "value": "claude-3-5-sonnet"}
+{"ts": 1794039887.3446078, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794039887.344832, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794039887.3469033, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794039887.3481271, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794039887.3505, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794039887.3517585, "action": "SET", "key": "task_message", "value": "Test for model gemini-2.0-flash"}
+{"ts": 1794039887.3522058, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test for model gemini-2.0-flash"}
+{"ts": 1794039887.3525414, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794039887.352811, "action": "SET", "key": "active_model", "value": "gemini-2.0-flash"}
+{"ts": 1794039887.353068, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794039887.3533297, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794039887.3550315, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794039887.3554492, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794039887.3708625, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794041714.1625395, "action": "SET", "key": "task_message", "value": "Test antigravity CLI (agy) với 2 model riêng lẻ trên workspace: gemini-3.8-flash-high và gpt-oss-120b-medium; 4 test read+exec đã SUCCESS, gate 129+6 pass"}
+{"ts": 1794041714.163201, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Test antigravity CLI (agy) với 2 model riêng lẻ trên workspace: gemini-3.8-flash-high và gpt-oss-120b-medium; 4 test read+exec đã SUCCESS, gate 129+6 pass"}
+{"ts": 1794041714.1634083, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794041714.1634996, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794041714.1635697, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794041714.1636622, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794041714.164931, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794041714.1653194, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794041714.1837578, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794043076.403193, "action": "SET", "key": "task_message", "value": "tôi cần bạn nghiên cứu project này và kiểm tra tồn động các vấn đề lỗi, xử lý bằng agent-system để đạt hiệu quả cao nhất"}
+{"ts": 1794043076.4035919, "action": "SET", "key": "research_data", "value": "analyzed_context_for: tôi cần bạn nghiên cứu project này và kiểm tra tồn động các vấn đề lỗi, xử lý bằng agent-system để đạt hiệu quả cao nhất"}
+{"ts": 1794043076.403759, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794043076.4041636, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794043076.404517, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794043076.4046445, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794043076.4054232, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794043076.4057257, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794043076.426464, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794043517.3694732, "action": "SET", "key": "task_message", "value": "Hoàn thiện sticky‑note app – xác thực UI, dữ liệu, README và screenshot"}
+{"ts": 1794043517.369637, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Hoàn thiện sticky‑note app – xác thực UI, dữ liệu, README và screenshot"}
+{"ts": 1794043517.3697474, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794043517.3698142, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794043517.3698716, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794043517.369923, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794043517.370704, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794043517.370843, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794043517.3893507, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794065890.4593136, "action": "SET", "key": "task_message", "value": "are you sure"}
+{"ts": 1794065890.4599254, "action": "SET", "key": "research_data", "value": "analyzed_context_for: are you sure"}
+{"ts": 1794065890.4600828, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794065890.4601562, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794065890.4602146, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794065890.4602687, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794065890.4610245, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794065890.4612439, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794065890.477748, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794066087.2983441, "action": "SET", "key": "task_message", "value": "--help"}
+{"ts": 1794066087.2986536, "action": "SET", "key": "research_data", "value": "analyzed_context_for: --help"}
+{"ts": 1794066087.298875, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794066087.2989938, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794066087.2990854, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794066087.2991662, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794066087.3000317, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794066087.3002543, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794066087.3382864, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794066091.184267, "action": "SET", "key": "task_message", "value": "--version"}
+{"ts": 1794066091.1869276, "action": "SET", "key": "research_data", "value": "analyzed_context_for: --version"}
+{"ts": 1794066091.1872613, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794066091.1873944, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794066091.1875434, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794066091.1876428, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794066091.1888642, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794066091.1891718, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794066091.200445, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794067421.7585733, "action": "SET", "key": "task_message", "value": "Implement a secure command‑execution capability for the model using Antigravity workflow (run_python). Provide workflow file, wrapper, whitelist, audit log, tests, and documentation."}
+{"ts": 1794067421.7587562, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Implement a secure command‑execution capability for the model using Antigravity workflow (run_python). Provide workflow file, wrapper, whitelist, audit log, tests, and documentation."}
+{"ts": 1794067421.7588725, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794067421.7589364, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794067421.7594616, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794067421.7595978, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794067421.76018, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794067421.76034, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794067421.7685487, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794069214.5615478, "action": "SET", "key": "task_message", "value": "Create a research group to verify the secure command-execution implementation and ensure it runs correctly."}
+{"ts": 1794069214.5618474, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Create a research group to verify the secure command-execution implementation and ensure it runs correctly."}
+{"ts": 1794069214.562012, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794069214.562145, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794069214.5622623, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794069214.5623684, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794069214.5634007, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794069214.5636375, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794069214.5875504, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794071338.5294073, "action": "SET", "key": "task_message", "value": "Run pytest to verify the secure command-execution implementation"}
+{"ts": 1794071338.5295613, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Run pytest to verify the secure command-execution implementation"}
+{"ts": 1794071338.5296586, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794071338.5297198, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794071338.5297751, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794071338.529825, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794071338.5304346, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794071338.5305605, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794071338.5508306, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794123067.3987908, "action": "SET", "key": "task_message", "value": "Research and verify the Light-Story system using agent-system and folder-agent, then generate detailed high‑availability ideas to implement and complete the TL;DR Recommendations: (1) keep current normalized core, (2) denormalize hot counters, (3) add hash‑partitioning on chapters >5M rows, (4) consider Redis hot‑counter sync, (5) create materialised view for stories+tags, (6) enable Supabase read replicas and route reads via Workers, (7) monitor index bloat and re‑index. Produce a concrete plan, spec, and code snippets where appropriate."}
+{"ts": 1794123067.3994458, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Research and verify the Light-Story system using agent-system and folder-agent, then generate detailed high‑availability ideas to implement and complete the TL;DR Recommendations: (1) keep current normalized core, (2) denormalize hot counters, (3) add hash‑partitioning on chapters >5M rows, (4) consider Redis hot‑counter sync, (5) create materialised view for stories+tags, (6) enable Supabase read replicas and route reads via Workers, (7) monitor index bloat and re‑index. Produce a concrete plan, spec, and code snippets where appropriate."}
+{"ts": 1794123067.3995862, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794123067.3996558, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794123067.399718, "action": "SET", "key": "root_cause", "value": "general_task"}
+{"ts": 1794123067.3997693, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_general_task", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794123067.4008992, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794123067.401424, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794123067.4213989, "action": "SET", "key": "review", "value": "passed"}
+{"ts": 1794123716.9350638, "action": "SET", "key": "task_message", "value": "Research system with agent-system and folder-agent, generate ideas to update and complete the checklist: 1. Prefix /api/v1/ for new routes. 2. Add middleware in Cloudflare Worker for JWT auth, Idempotency-Key, logging, rate‑limit. 3. Update OpenAPI docs on endpoint changes. 4. Use select(..., { count: 'exact' }) for pagination. 5. Apply standardized error JSON responses. 6. Version lock: create v2 branch on breaking changes, update README, deprecate. 7. Protect admin actions with requireActionRole + RLS, expose via Server‑Actions only."}
+{"ts": 1794123716.9353416, "action": "SET", "key": "research_data", "value": "analyzed_context_for: Research system with agent-system and folder-agent, generate ideas to update and complete the checklist: 1. Prefix /api/v1/ for new routes. 2. Add middleware in Cloudflare Worker for JWT auth, Idempotency-Key, logging, rate‑limit. 3. Update OpenAPI docs on endpoint changes. 4. Use select(..., { count: 'exact' }) for pagination. 5. Apply standardized error JSON responses. 6. Version lock: create v2 branch on breaking changes, update README, deprecate. 7. Protect admin actions with requireActionRole + RLS, expose via Server‑Actions only."}
+{"ts": 1794123716.9354608, "action": "SET", "key": "llm_output", "value": "plan_ready"}
+{"ts": 1794123716.935546, "action": "SET", "key": "active_model", "value": "gpt-4o-mini"}
+{"ts": 1794123716.93561, "action": "SET", "key": "root_cause", "value": "standard_feature_request"}
+{"ts": 1794123716.9356647, "action": "SET", "key": "plan", "value": {"action": "implement_solution_for_standard_feature_request", "architecture": "REST_API_Controller_and_Service", "blast_radius_safe": true}}
+{"ts": 1794123716.9366875, "action": "SET", "key": "code_path", "value": "D:\\04_Tools\\Workflow\\Close_workflow\\generated_api.py"}
+{"ts": 1794123716.9370143, "action": "SET", "key": "validation_pass", "value": true}
+{"ts": 1794123716.955745, "action": "SET", "key": "review", "value": "passed"}
