@@ -10,10 +10,12 @@ from test_plan import env, step  # noqa: F401  (env is the shared fake-agent fix
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="fake binaries are POSIX scripts")
 KEY = "sk-ant-FAKE1234567890ABCDEF"
-ASK = {"hypothesis": "You want a report of failed logins", "confidence": 40, "missing": "who reads it", "question": "Who reads the report?", "guess": "the on-call engineer", "brief": None}
-BRIEF = {"intent": "give the on-call engineer a daily list of failed logins", "scope": "one script, no UI", "non_goals": ["no alerting"], "constraints": ["stdlib only"],
-         "success": "the script prints yesterday's failed logins", "assumptions": ["logs are in /var/log"]}
-DONE = {"hypothesis": "daily failed-login list for on-call", "confidence": 96, "missing": "", "question": "", "guess": "", "brief": BRIEF}
+ASK = {"coverage": {**{k: "known" for k in ("who", "why", "success")}}, "hypothesis": "You want a report of failed logins", "confidence": 40, "missing": "who reads it", "question": "Who reads the report?", "guess": "the on-call engineer", "brief": None}
+BRIEF = {"intent": "give the on-call engineer a daily list of failed logins", "who": "the on-call engineer", "why": "attacks go unnoticed because nobody reads auth.log", "scope": "one script, no UI",
+         "impact": ["auth.log stays untouched", "the login path must not change"], "non_goals": ["no alerting"], "constraints": ["stdlib only"], "success": "the script prints yesterday's failed logins",
+         "risks": ["empty log file", "log rotated at midnight"], "assumptions": ["logs are in /var/log"]}
+KNOWN = {k: "known" for k in interview.DIMS}
+DONE = {"hypothesis": "daily failed-login list for on-call", "confidence": 96, "coverage": KNOWN, "missing": "", "question": "", "guess": "", "brief": BRIEF}
 
 
 def script(env, monkeypatch, *replies):
@@ -62,7 +64,7 @@ def test_interview_step_prints_one_round_as_json_for_agents(env, monkeypatch, ca
 def test_the_brief_must_be_confirmed_before_a_plan_is_drafted(env, monkeypatch, tmp_path, capsys):
     script(env, monkeypatch, DONE)
     f = tmp_path / "brief.json"
-    f.write_text(json.dumps({**BRIEF, "confidence": 96, "qa": []}))
+    f.write_text(json.dumps({**BRIEF, "confidence": 96, "qa": [], "coverage": KNOWN}))
     assert cli.main(["plan", "report", "--brief", str(f)]) == 1
     assert "not confirmed" in capsys.readouterr().err
     assert cli.main(["plan", "report", "--brief", str(f), "--confirmed"]) == 0
@@ -96,9 +98,10 @@ def test_a_correction_to_the_brief_earns_another_round(env, monkeypatch):
 
 def test_enter_accepts_the_guess_and_stop_ends_with_assumptions(env, monkeypatch):
     script(env, monkeypatch, ASK, ASK, {**DONE, "confidence": 80})
-    pid = interview.run_cli("g", ask=answers("", "/stop", "y"), out=lambda *_: None)
+    pid = interview.run_cli("g", ask=answers("", "/stop", "", "y"), out=lambda *_: None)  # the empty answer before "y" is not a confirmation
     b = json.loads((env.home / "plans" / pid / "plan.json").read_text(encoding="utf-8"))["brief"]
     assert b["qa"][0]["a"].startswith("(chấp nhận đoán)") and b["confidence"] == 80
+    assert any("only accepted my guess: Who reads the report?" in a for a in b["assumptions"])  # code adds it, the agent did not have to
 
 
 def test_report_and_step_agents_carry_the_brief(env, monkeypatch):
@@ -119,3 +122,64 @@ def test_interview_needs_a_terminal(env, monkeypatch, capsys):
     monkeypatch.setattr(interview, "tty", lambda: False)
     assert cli.main(["interview", "something", "vague"]) == 1
     assert "interview-step" in capsys.readouterr().err
+
+
+# --- does the interview reach the root cause, the impact and the risks? ------------------------------------------------
+
+def test_the_prompt_makes_the_agent_cover_why_impact_and_risks(env, monkeypatch):
+    seen = []
+    real = plan.agents.call
+    monkeypatch.setattr(plan.agents, "call", lambda chain, prompt, o, t: (seen.append(prompt), real(chain, prompt, o, t))[1])
+    script(env, monkeypatch, ASK)
+    interview.step("g", [], plan.agents.chain_from_env("claude:haiku", None), str(env.repo))
+    for needle in ("root cause", "must keep working exactly as now", "what could go wrong", "Never give 95 or more while any of the seven is unknown", '"coverage"'):
+        assert needle in seen[0], needle
+
+
+def test_confidence_cannot_reach_95_while_a_dimension_is_unknown(env, monkeypatch):
+    gap = {**DONE, "coverage": {**KNOWN, "impact": "unknown", "risks": "unknown"}}
+    script(env, monkeypatch, gap, ASK)  # the first reply is rejected, the repair round asks a question
+    r = interview.step("g", [], plan.agents.chain_from_env("claude:haiku", None), str(env.repo))
+    assert r["brief"] is None and r["question"]
+    with pytest.raises(interview.InterviewError, match="impact, risks"):
+        interview._parse(json.dumps(gap), False)
+    script(env, monkeypatch, gap)
+    with pytest.raises(interview.InterviewError, match="usable reply"):
+        interview.step("g", [], plan.agents.chain_from_env("claude:haiku", None), str(env.repo))
+
+
+def test_out_of_rounds_with_a_gap_keeps_the_gap_in_the_brief(env, monkeypatch):
+    script(env, monkeypatch, {**DONE, "confidence": 80, "coverage": {**KNOWN, "impact": "unknown"}, "brief": {k: v for k, v in BRIEF.items() if k not in ("why", "impact")}})
+    r = interview.step("g", [{"q": "a?", "a": "b"}] * 3, plan.agents.chain_from_env("claude:haiku", None), str(env.repo), rounds=3)
+    b = interview.clean({**r["brief"], "qa": []})
+    assert b["impact"] == [interview.NONE] and b["why"] == interview.NONE and "impact is unknown, not confirmed" in b["assumptions"]
+
+
+def test_a_brief_without_why_or_impact_is_not_accepted():
+    bad = interview.brief_problems({**{k: v for k, v in BRIEF.items() if k not in ("why", "impact")}, "confirmed": True})
+    assert any("brief.why" in p for p in bad) and any("brief.impact" in p for p in bad)
+
+
+def test_why_impact_and_risks_reach_the_planner_the_step_agents_and_the_report(env, monkeypatch):
+    seen = []
+    real = plan.agents.call
+    monkeypatch.setattr(plan.agents, "call", lambda chain, prompt, o, t: (seen.append(prompt), real(chain, prompt, o, t))[1])
+    script(env, monkeypatch, DONE)
+    pid = interview.run_cli("g", ask=answers("y"), out=lambda *_: None)
+    assert "why (root problem): attacks go unnoticed" in next(p for p in seen if "planning agent" in p)
+    assert plan.approve(pid, wait_for=True) == "done"
+    assert "must not change: auth.log stays untouched" in next(p for p in seen if "Your step [" in p)
+    rep = (env.home / "plans" / pid / "report.md").read_text(encoding="utf-8")
+    assert "Vì sao (vấn đề gốc)" in rep and "log rotated at midnight" in rep and "Bao phủ 7 mục" in rep
+    assert "7/7 mục" in next(l for l in rep.splitlines() if l.startswith("| 1 "))
+
+
+def test_an_unusable_agent_reply_is_an_error_message_not_a_traceback(env, monkeypatch, capsys):
+    script(env, monkeypatch, {"nonsense": True})
+    assert cli.main(["interview-step", "something", "vague"]) == 1
+    assert "usable reply" in capsys.readouterr().err
+
+
+def test_a_coverage_value_with_an_explanation_still_reads_as_its_leading_word():
+    c = interview.coverage({"who": "Assumed: the nightly job", "why": "known", "impact": "unknown: nothing checked", "success": "maybe", "constraints": None})
+    assert c["who"] == "assumed" and c["why"] == "known" and c["impact"] == "unknown" and c["success"] == "unknown" and c["constraints"] == "unknown" and c["risks"] == "unknown"

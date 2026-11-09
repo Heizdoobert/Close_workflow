@@ -142,7 +142,8 @@ def _scan_row(r, gate_name, last, done, what, limit=""):
 def step_brief(plan):
     """What each step agent is told: the user's confirmed success criteria and non-goals, then the analysis."""
     b = plan.get("brief")
-    req = f"Requirements the user confirmed: success: {_cut(b['success'], 200)}; non-goals: {_cut('; '.join(b['non_goals']) or '-', 200)}\n" if b else ""
+    req = (f"Requirements the user confirmed: success: {_cut(b['success'], 200)}; must not change: {_cut('; '.join(b['impact']), 200)}; non-goals: {_cut('; '.join(b['non_goals']) or '-', 200)}; "
+           f"edge cases: {_cut('; '.join(b['risks']) or '-', 200)}\n" if b else "")
     return req + brief(plan.get("analysis"))
 
 
@@ -158,7 +159,8 @@ def coverage(plan, st):
 
     def has(k):
         return ("MỘT PHẦN", f"có, {told}") if a and a.get(k) else no_a
-    rows = [("Interview (làm rõ yêu cầu)", *((("OK" if b["confidence"] >= 95 else "MỘT PHẦN"), f"{len(b['qa'])} câu hỏi, độ tự tin {b['confidence']}% (agent tự báo), user xác nhận brief"
+    rows = [("Interview (làm rõ yêu cầu)", *((("OK" if b["confidence"] >= 95 and all(v == "known" for v in b["coverage"].values()) else "MỘT PHẦN"),
+                                                f"{len(b['qa'])} câu hỏi, {sum(v == 'known' for v in b['coverage'].values())}/{len(b['coverage'])} mục (ai, vì sao, ảnh hưởng, thành công, ràng buộc, ngoài phạm vi, rủi ro) đã rõ, độ tự tin {b['confidence']}% (agent tự báo), user xác nhận brief"
                                                 + (f"; còn {len(b['assumptions'])} giả định chưa xác nhận" if b["assumptions"] else "")) if b else ("THIẾU", "không phỏng vấn: yêu cầu đi thẳng vào plan"))),
             ("Research", *(("OK", f"{len(a['research'])} file dẫn chứng, đều tồn tại ở base") if a else no_a)), ("Thinking Why (nguyên nhân gốc)", *has("root_cause")),
             ("How can do that (cách làm)", *(("MỘT PHẦN", f"có + {len(a['alternatives'])} phương án bị loại, {told}") if a else no_a)), ("How can fix that (cách sửa)", *has("fix")),

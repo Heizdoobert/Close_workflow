@@ -171,7 +171,7 @@ def main(argv=None):
             print(f"{'done' if ok else 'failed'} task {rest[0]} ({rec['attempts']} attempt(s), ${rec['cost_usd']})")
             return 0 if ok else 1
         tid = engine.submit(a[0])  # anything else is the task message
-    except plan.PlanError as e:
+    except (plan.PlanError, interview.InterviewError) as e:
         print(f"plan error: {e}", file=sys.stderr)
         return 1
     except (OSError, RedisError) as e:
