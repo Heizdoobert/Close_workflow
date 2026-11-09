@@ -141,6 +141,20 @@ def register_mcp():
         say("MCP server registered (restart Claude Desktop / Cursor / Antigravity). Claude Code: claude mcp add agent-system -- " + str(exe) + " mcp")
 
 
+def install_skill(home=None):
+    """Copy the `task:[...]` skill into ~/.claude/skills when Claude Code is installed (its dir exists). A different existing copy is kept as SKILL.md.bak."""
+    dest = Path(home or Path.home()) / ".claude" / "skills" / "closed-loop-task-engine" / "SKILL.md"
+    if not dest.parents[2].is_dir():
+        return None
+    src = (ROOT / "skills" / "closed-loop-task-engine" / "SKILL.md").read_bytes()
+    if dest.exists() and dest.read_bytes() != src:
+        shutil.copy2(dest, dest.with_name("SKILL.md.bak"))
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(src)
+    say(f"skill task:[...] installed: {dest}")
+    return dest
+
+
 def install_service():
     py_exe = BIN / ("python.exe" if WIN else "python")
     if sys.platform.startswith("linux"):
@@ -194,6 +208,7 @@ def main():
     link_shims()
     if src:
         register_mcp()
+    install_skill()
     if a.service:
         install_service()
     say("health check:")

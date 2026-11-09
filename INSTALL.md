@@ -26,7 +26,7 @@ Flags (same for both): `--service` start the listener at login · `--no-docker` 
 
 What it does, in order: venv → `pip install -e` both projects → `.env` with a random Redis password → `docker compose up -d` → `flow-task` and `agent-system` on PATH (Linux/macOS: symlinks in `~/.local/bin`; Windows: prints one PATH command) → registers the MCP server in Claude Desktop, Cursor, Windsurf, Antigravity → optional listener service (systemd `--user`, launchd, Task Scheduler) → `flow-task doctor`.
 
-It never rewrites your global rules files (`~/.claude/CLAUDE.md` etc.). Existing `flow-task` / `agent-system` commands are kept as `*.bak`.
+It never rewrites your global rules files (`~/.claude/CLAUDE.md` etc.); to make agents follow `task:[...]` run `agent-system install --target rules` once (writes a marked block into the Gemini, Cursor, Antigravity and Claude Code rules files). When `~/.claude` exists it copies the Claude skill `skills/closed-loop-task-engine` to `~/.claude/skills/` (a different existing copy is kept as `SKILL.md.bak`). Existing `flow-task` / `agent-system` commands are kept as `*.bak`.
 
 Claude Code CLI registers MCP servers itself; the installer prints the exact command:
 `claude mcp add agent-system -- <repo>/.venv/bin/agent-system mcp`
