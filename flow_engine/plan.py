@@ -179,6 +179,9 @@ def validate(plan, max_steps=None):
 
 def render_md(pid, plan, state):
     out = [f"# Plan {pid}", f"Goal: {plan['goal']}", f"Status: {state['status']}  | base {plan['base'][:8]}  | model: {state.get('parent_model') or 'default'}", ""]
+    if state.get("dirty_files"):
+        out += ["WARNING: the repo has uncommitted changes. Steps start from the base commit, so these are NOT part of the plan:"]
+        out += [f"  {line}" for line in state["dirty_files"]] + [""]
     for s in plan["steps"]:
         out += [f"## [{s['id']}] {s['title']}", f"- why: {s['reason']}", f"- deps: {', '.join(s['deps']) or '-'}",
                 f"- files: {', '.join(s['files']) or '-'}", f"- acceptance: `{s['acceptance'] or 'none'}`", ""]
@@ -206,6 +209,9 @@ def create(goal, parent_model=None):
     """Ask the planner agent for a plan, validate it, store it awaiting approval. Returns the plan id."""
     wd = repo()
     git(wd, "rev-parse", "--git-dir")
+    if git(wd, "rev-parse", "--verify", "-q", "HEAD", check=False).returncode:
+        raise PlanError("repo has no commits: make an initial commit first")
+    dirty = git(wd, "status", "--porcelain", check=False).stdout.splitlines()  # plans start from the commit, so uncommitted work is left out: say so
     pid = time.strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2)
     d = plans_dir() / pid
     d.mkdir(parents=True)
@@ -225,8 +231,12 @@ def create(goal, parent_model=None):
     if plan is None:
         raise PlanError("planner did not produce a valid plan")
     plan = {"goal": goal, "repo": wd, "base": git(wd, "rev-parse", "HEAD").stdout.strip(), "steps": plan["steps"]}  # repo is fixed here: approving from another cwd must not retarget it
+    if dirty:
+        plan["dirty_files"] = dirty[:20]
     state = {"id": pid, "status": "awaiting_approval", "goal": goal, "created": engine.now(), "parent_model": parent_model or os.environ.get("FLOW_PARENT_MODEL", ""),
              "plan_cost_usd": round(cost, 6), "plan_trace": trace, "steps": {s["id"]: {"status": "pending"} for s in plan["steps"]}}
+    if dirty:
+        state["dirty_files"] = dirty[:20]
     _atomic(d / "plan.json", json.dumps(plan, indent=2, ensure_ascii=False))
     _atomic(d / "state.json", json.dumps(state, indent=2, ensure_ascii=False))
     (d / "plan.md").write_text(render_md(pid, plan, state), encoding="utf-8")
@@ -291,6 +301,8 @@ class Ctx:
         self.slock, self.glock, self.mlock = threading.Lock(), threading.Lock(), threading.Lock()
         self.chain = agents.chain_from_env("claude:haiku", state.get("parent_model"))
         self.budget = float(os.environ.get("FLOW_PLAN_MAX_USD", "3.0"))
+        self.step_usd = float(os.environ.get("FLOW_STEP_USD", "0.40"))  # per-step estimate: what a launch reserves from the budget
+        self.reserved = {}  # sid -> USD still reserved for that running step (spent is taken off it as the step pays)
 
     def save(self):
         for _ in range(5):
@@ -301,12 +313,23 @@ class Ctx:
             except RuntimeError:
                 time.sleep(0.05)
 
-    def add_cost(self, cost, tokens):
+    def add_cost(self, cost, tokens, sid=None):
         with self.slock:
             self.state["cost_usd"] = self.state.get("cost_usd", 0) + cost
+            if sid in self.reserved:
+                self.reserved[sid] = max(0.0, self.reserved[sid] - cost)
             t = self.state.setdefault("tokens", {})
             for k, v in tokens.items():
                 t[k] = t.get(k, 0) + v
+
+    def cap(self, sid):
+        """USD this running step may still spend."""
+        with self.slock:
+            return self.reserved.get(sid, 0.0)
+
+    def free(self):
+        """USD neither spent nor reserved by a running step. Caller holds slock."""
+        return self.budget - self.spent - sum(self.reserved.values())
 
     @property
     def spent(self):
@@ -384,12 +407,13 @@ def do_step(ctx, step, rescued=False):
     base_prompt = bridge.recall(f"{step['title']} {step['prompt'][:200]}") + base_prompt
     prompt, passed, summary, error, first_fail, failed_names = base_prompt, False, "", "", "", ""
     for n in range(1, int(os.environ.get("FLOW_RETRIES", "2")) + 2):
-        if ctx.spent >= ctx.budget:
+        cap = ctx.cap(sid)  # this step's reservation, minus what it has already paid
+        if cap <= 0:
             error = f"plan budget ${ctx.budget} exhausted"
             break
-        o = agents.Opts(str(wt), agents.WRITE_TOOLS, min(float(os.environ.get("FLOW_STEP_USD", "0.40")), ctx.budget - ctx.spent), int(os.environ.get("FLOW_TIMEOUT", "600")))
+        o = agents.Opts(str(wt), agents.WRITE_TOOLS, cap, int(os.environ.get("FLOW_TIMEOUT", "600")))
         res, cost, tok = agents.call(ctx.chain, prompt, o, ev["api"])
-        ctx.add_cost(cost, tok)
+        ctx.add_cost(cost, tok, sid)
         ev["backend"] = res.backend or ev.get("backend", "")
         if not res.ok:
             error = redact(res.error)
@@ -510,17 +534,27 @@ def run(pid):
                 ready, skip = _launchable(ctx, running_files)
                 for s in skip:
                     state["steps"][s["id"]].update(status="skipped", error="a dependency failed")
-                for s in ready[:max(0, par - len(futures))]:
+                for s in ready:
+                    if len(futures) >= par:
+                        break
+                    with ctx.slock:  # reserve the per-step estimate before launch, so parallel steps cannot together overshoot the budget
+                        if ctx.free() < ctx.step_usd:
+                            if futures:
+                                break  # running steps release their reservation when they finish
+                            state["steps"][s["id"]].update(status="failed", error=f"plan budget ${ctx.budget} cannot cover the per-step reserve ${ctx.step_usd}")
+                            continue
+                        ctx.reserved[s["id"]] = ctx.step_usd
                     state["steps"][s["id"]]["status"] = "queued"
                     futures[pool.submit(do_step, ctx, s)] = s["id"]
                     running_files |= set(s["files"])
-                if skip:
-                    ctx.save()
+                ctx.save()
                 if not futures:
                     break
                 fin, _ = wait(list(futures), return_when=FIRST_COMPLETED)
                 for f in fin:
                     sid = futures.pop(f)
+                    with ctx.slock:
+                        ctx.reserved.pop(sid, None)  # release: the step's real cost is already in spent
                     try:
                         f.result()
                     except Exception as e:  # a crash inside a step must not take the whole plan down

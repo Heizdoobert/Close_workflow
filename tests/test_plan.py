@@ -455,3 +455,71 @@ def test_secret_in_failure_recipe_is_redacted_before_it_is_stored(env, monkeypat
     plan.approve(pid, wait_for=True)
     recipe = store["flow-gate:acceptance"]
     assert FAKE_AWS not in recipe and "token=[REDACTED]" in recipe and "still failing" in recipe
+
+
+def test_budget_reserve_keeps_parallel_steps_within_plan_budget(env, monkeypatch):
+    # each fake call costs $0.001; with $0.0015 for the whole plan only one $0.001 reservation fits at a time
+    monkeypatch.setenv("FLOW_PLAN_MAX_USD", "0.0015")
+    monkeypatch.setenv("FLOW_STEP_USD", "0.001")
+    env.script([step("s1", files=["a.py"]), step("s2", files=["b.py"])],
+               {"s1": {"files": {"a.py": "A = 1\n"}, "sleep": 1}, "s2": {"files": {"b.py": "B = 2\n"}, "sleep": 1}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) == "partial"
+    st = json.loads((env.home / "plans" / pid / "state.json").read_text(encoding="utf-8"))
+    assert st["cost_usd"] <= 0.0015 + 1e-9
+    assert [st["steps"][s]["status"] for s in ("s1", "s2")] == ["done", "failed"]
+    assert "cannot cover the per-step reserve" in st["steps"]["s2"]["error"]
+    assert st["steps"]["s2"].get("attempts", []) == []  # s2 was never launched, so it paid nothing
+    assert {c[1] for c in env.calls() if c[0] == "step-start"} == {"s1"}
+
+
+def test_budget_big_enough_for_both_parallel_steps_runs_both(env, monkeypatch):
+    monkeypatch.setenv("FLOW_PLAN_MAX_USD", "0.002")
+    monkeypatch.setenv("FLOW_STEP_USD", "0.001")
+    env.script([step("s1", files=["a.py"]), step("s2", files=["b.py"])],
+               {"s1": {"files": {"a.py": "A = 1\n"}, "sleep": 1}, "s2": {"files": {"b.py": "B = 2\n"}, "sleep": 1}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) == "done"
+    st = json.loads((env.home / "plans" / pid / "state.json").read_text(encoding="utf-8"))
+    assert st["cost_usd"] <= 0.002 + 1e-9
+
+
+def test_dirty_repo_plan_warns_and_runs_from_the_commit(env):
+    (env.repo / "scratch.txt").write_text("not committed\n")
+    env.script([step("s1", files=["a.py"], acc="test -f a.py")], {"s1": {"files": {"a.py": "x=1\n"}}})
+    pid = plan.create("g")
+    st = json.loads((env.home / "plans" / pid / "state.json").read_text(encoding="utf-8"))
+    assert st["dirty_files"] == ["?? scratch.txt"]
+    assert json.loads((env.home / "plans" / pid / "plan.json").read_text(encoding="utf-8"))["dirty_files"] == ["?? scratch.txt"]
+    md = (env.home / "plans" / pid / "plan.md").read_text(encoding="utf-8")
+    assert "WARNING" in md and "?? scratch.txt" in md
+    assert plan.approve(pid, wait_for=True) == "done"
+    assert sh(env.repo, "git", "ls-tree", "--name-only", f"flow/{pid}").split() == ["README.md", "a.py"]  # scratch.txt is not merged
+
+
+def test_clean_repo_has_no_dirty_warning(env):
+    env.script([step("s1", files=["a.py"])], {"s1": {"files": {"a.py": "x=1\n"}}})
+    pid = plan.create("g")
+    assert "dirty_files" not in json.loads((env.home / "plans" / pid / "state.json").read_text(encoding="utf-8"))
+    assert "WARNING" not in (env.home / "plans" / pid / "plan.md").read_text(encoding="utf-8")
+
+
+def test_repo_with_no_commits_is_refused_with_a_clear_message(tmp_path, env, monkeypatch):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    sh(empty, "git", "init", "-q", "-b", "main")
+    monkeypatch.setenv("FLOW_WORKDIR", str(empty))
+    env.script([step("s1", files=["a.py"])], {"s1": {"files": {"a.py": "x=1\n"}}})
+    with pytest.raises(plan.PlanError, match="repo has no commits: make an initial commit first"):
+        plan.create("g")
+    assert not (env.home / "plans").exists() or not any((env.home / "plans").iterdir())  # nothing half-created
+
+
+def test_detached_head_plan_is_created_from_the_commit_sha(env):
+    sh(env.repo, "git", "checkout", "-q", "--detach")
+    env.script([step("s1", files=["a.py"], acc="test -f a.py")], {"s1": {"files": {"a.py": "x=1\n"}}})
+    pid = plan.create("g")
+    d = json.loads((env.home / "plans" / pid / "plan.json").read_text(encoding="utf-8"))
+    assert d["base"] == env.main_head and len(d["base"]) == 40
+    assert plan.approve(pid, wait_for=True) == "done"
+    assert sh(env.repo, "git", "rev-parse", f"flow/{pid}^1") == env.main_head
