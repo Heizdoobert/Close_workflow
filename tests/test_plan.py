@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -322,3 +323,240 @@ def test_retry_reruns_only_the_failed_steps_of_a_failed_plan(env, monkeypatch):
     assert st["retries"] == 1 and st["steps"]["a"]["previous"]["status"] == "failed"
     assert sh(env.repo, "git", "show", f"flow/{pid}:b.py") == "1"  # step b was kept, not re-run
     assert [c[1] for c in env.calls()[before:] if c[0] == "step-start"] == ["a"]  # only step a ran again
+
+def _alive(pid):
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            return f.read().rsplit(")", 1)[1].split()[0] != "Z"  # a zombie has exited; only its parent has not reaped it yet
+    except OSError:  # gone between open() and read() (ProcessLookupError), or no /proc at all
+        pass
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def _wait_dead(pid):
+    deadline = time.time() + 5
+    while _alive(pid) and time.time() < deadline:
+        time.sleep(0.05)
+    return not _alive(pid)
+
+
+def test_acceptance_timeout_kills_the_hung_grandchild_too(tmp_path, monkeypatch):
+    monkeypatch.setenv("FLOW_ACCEPT_TIMEOUT", "1")
+    pidfile = tmp_path / "gc.pid"
+    r = plan.accept({"acceptance": f"sleep 60 & echo $! > {pidfile}; wait"}, str(tmp_path))
+    assert r["ok"] is False and r["rc"] is None and r["tail"] == "timeout"
+    assert _wait_dead(int(pidfile.read_text())), "a grandchild of a timed-out acceptance command survived"
+
+
+def test_acceptance_grandchild_holding_output_does_not_block(tmp_path, monkeypatch):
+    monkeypatch.setenv("FLOW_ACCEPT_TIMEOUT", "1")
+    pidfile = tmp_path / "gc.pid"
+    t0 = time.time()
+    r = plan.accept({"acceptance": f"sleep 60 & echo $! > {pidfile}; sleep 60"}, str(tmp_path))
+    assert r["tail"] == "timeout" and time.time() - t0 < 15
+    assert _wait_dead(int(pidfile.read_text()))
+
+
+def test_acceptance_huge_output_is_capped_and_keeps_the_end(tmp_path):
+    py = shlex.quote(sys.executable)
+    r = plan.accept({"acceptance": f"{py} -c \"import sys; sys.stdout.write('x' * (8 * 1024 * 1024) + 'END\\n'); sys.stderr.write('ERR\\n')\""}, str(tmp_path))
+    assert r["ok"] is True and r["rc"] == 0
+    assert len(r["tail"]) <= 600 and r["tail"].endswith("END\nERR")
+
+
+def test_acceptance_failure_still_reports_rc_and_tail(tmp_path):
+    py = shlex.quote(sys.executable)
+    r = plan.accept({"acceptance": f"{py} -c \"import sys; print('nope'); sys.exit(3)\""}, str(tmp_path))
+    assert r["ok"] is False and r["rc"] == 3 and r["tail"] == "nope"
+
+
+def test_output_tail_reads_at_most_the_cap(tmp_path):
+    f = tmp_path / "big"
+    f.write_bytes(b"a" * (1024 * 1024) + b"TAIL")
+    with open(f, "rb") as fh:
+        t = plan._tail(fh)
+    assert len(t) <= plan.ACCEPT_TAIL_BYTES and t.endswith("TAIL")
+
+
+@pytest.mark.parametrize("path", ["CON", "con.txt", "PRN.py", "aux/x.py", "NUL", "nul.tar.gz", "COM1", "com9.log", "LPT1.txt", "lpt9", "dir/CON.md"])
+def test_validate_rejects_windows_reserved_device_names(path):
+    with pytest.raises(plan.PlanError, match="unsafe path"):
+        plan.validate({"steps": [step("a", files=[path])]})
+
+
+@pytest.mark.parametrize("path", ["a<b.py", "a>b", "a:b", 'a"b', "a|b", "a?b", "a*b", "dir:stream/x.py", "x\\y:z.py"])
+def test_validate_rejects_windows_invalid_characters(path):
+    with pytest.raises(plan.PlanError, match="unsafe path"):
+        plan.validate({"steps": [step("a", files=[path])]})
+
+
+@pytest.mark.parametrize("path", ["dir./x.py", "file.py.", "file.py ", "dir /x.py", "a/b. /c"])
+def test_validate_rejects_components_ending_in_dot_or_space(path):
+    with pytest.raises(plan.PlanError, match="unsafe path"):
+        plan.validate({"steps": [step("a", files=[path])]})
+
+
+def test_validate_rejects_backslash_traversal_on_any_os():
+    with pytest.raises(plan.PlanError, match="unsafe path"):
+        plan.validate({"steps": [step("a", files=["..\\secret.txt"])]})
+
+
+@pytest.mark.parametrize("path", ["", "   ", "\t"])
+def test_validate_rejects_empty_or_whitespace_paths_and_ids(path):
+    with pytest.raises(plan.PlanError):
+        plan.validate({"steps": [step("a", files=[path])]})
+    with pytest.raises(plan.PlanError):
+        plan.validate({"steps": [step(path or " ")]})
+
+
+def test_validate_keeps_ordinary_paths_working():
+    ok = ["flow_engine/plan.py", "tests/test_plan.py", "CONFIG.py", "COM10.txt", "console.py", "a.b/c-d_e.txt", "./x.py", "docs/AGENTIC_GAPS.md", "auxiliary/nullable.py"]
+    assert plan.validate({"steps": [step("a", files=ok)]})
+
+
+def test_symlink_pointing_outside_the_worktree_is_detected(tmp_path):
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("secret")
+    (wt / "ok.py").write_text("x = 1\n")
+    (wt / "inner").symlink_to(wt / "ok.py")
+    (wt / "link").symlink_to(outside)
+    (wt / "dir_link").symlink_to(tmp_path)
+    assert plan.escaping_paths(str(wt), ["ok.py", "inner", "new.py", "link", "dir_link/outside.txt"]) == ["link", "dir_link/outside.txt"]
+
+
+FAKE_KEY = "sk-ant-FAKE1234567890ABCDEF"
+FAKE_AWS = "AKIAFAKEFAKEFAKE1234"
+
+
+def test_redact_masks_each_secret_shape_and_keeps_the_words_around_it():
+    cases = {
+        f"key {FAKE_KEY} here": "key [REDACTED] here",
+        "openai sk-FAKE1234567890ABCDEFGH": "openai [REDACTED]",
+        f"aws {FAKE_AWS} id": "aws [REDACTED] id",
+        "gh ghp_FAKE1234567890ABCDEF ok": "gh [REDACTED] ok",
+        "pat github_pat_FAKE1234567890ABCDEFGH ok": "pat [REDACTED] ok",
+        "Authorization: Bearer FAKEbearerTOKEN123": "Authorization: Bearer [REDACTED]",
+        "api_key = FakeValue123": "api_key = [REDACTED]",
+        '"password": "FakePass987"': '"password": "[REDACTED]"',
+        "-----BEGIN RSA PRIVATE KEY-----\nFAKEKEYMATERIAL\n-----END RSA PRIVATE KEY-----": "[REDACTED]",  # gitleaks:allow fake PEM fixture
+        "-----BEGIN PRIVATE KEY-----\nFAKEKEYMATERIAL": "[REDACTED]",  # truncated block still masked
+        "tokens are fine, the task-runner too": "tokens are fine, the task-runner too",
+    }
+    for raw, want in cases.items():
+        assert plan.redact(raw) == want
+        assert plan.redact(plan.redact(raw)) == want  # idempotent
+    assert plan.redact(None) == ""
+
+
+def test_secret_in_agent_summary_and_acceptance_output_is_redacted_in_state_and_report(env, monkeypatch):
+    real_call = plan.agents.call
+
+    def leaky_call(*args, **kwargs):
+        res, cost, tok = real_call(*args, **kwargs)
+        res.text += f" leaked {FAKE_KEY} and {FAKE_AWS}"
+        return res, cost, tok
+    monkeypatch.setattr(plan.agents, "call", leaky_call)
+    check = f"import sys; sys.stderr.write('password=FakePass987 {FAKE_AWS}\\n'); sys.exit(1)"
+    env.script([step("s1", files=["a.py"], acc=f"{shlex.quote(sys.executable)} -c {shlex.quote(check)}")], {"s1": {"files": {"a.py": "A = 1\n"}}})
+    pid = plan.create("g")
+    plan.approve(pid, wait_for=True)
+    d = env.home / "plans" / pid
+    for name in ("report.md", "report.json", "state.json"):
+        text = (d / name).read_text(encoding="utf-8")
+        assert FAKE_KEY not in text and FAKE_AWS not in text and "FakePass987" not in text, name
+        assert "leaked" in text and "[REDACTED]" in text, name  # the words around the secret survive
+    assert "password=[REDACTED]" in (d / "state.json").read_text(encoding="utf-8")
+    assert json.loads((d / "state.json").read_text(encoding="utf-8"))["steps"]["s1"]["summary"].endswith("leaked [REDACTED] and [REDACTED]")
+
+
+def test_secret_in_failure_recipe_is_redacted_before_it_is_stored(env, monkeypatch):
+    store = {}
+
+    def fake_agent(*args, cwd=None, timeout=60):
+        out = ""
+        if args[:2] == ("memory", "recipe-record"):
+            store[args[3]] = args[5]
+        elif args[:2] == ("memory", "recipe-get"):
+            out = "No recipe found for x."
+        return subprocess.CompletedProcess(args, 0, out, "")
+    monkeypatch.setattr(bridge, "run_agent", fake_agent)
+    check = f"import sys; sys.stderr.write('token={FAKE_AWS}\\n'); sys.exit(1)"
+    env.script([step("s1", files=["a.py"], acc=f"{shlex.quote(sys.executable)} -c {shlex.quote(check)}")], {"s1": {"files": {"a.py": "A = 1\n"}}})
+    pid = plan.create("g")
+    plan.approve(pid, wait_for=True)
+    recipe = store["flow-gate:acceptance"]
+    assert FAKE_AWS not in recipe and "token=[REDACTED]" in recipe and "still failing" in recipe
+
+
+def test_budget_reserve_keeps_parallel_steps_within_plan_budget(env, monkeypatch):
+    # each fake call costs $0.001; with $0.0015 for the whole plan only one $0.001 reservation fits at a time
+    monkeypatch.setenv("FLOW_PLAN_MAX_USD", "0.0015")
+    monkeypatch.setenv("FLOW_STEP_USD", "0.001")
+    env.script([step("s1", files=["a.py"]), step("s2", files=["b.py"])],
+               {"s1": {"files": {"a.py": "A = 1\n"}, "sleep": 1}, "s2": {"files": {"b.py": "B = 2\n"}, "sleep": 1}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) == "partial"
+    st = json.loads((env.home / "plans" / pid / "state.json").read_text(encoding="utf-8"))
+    assert st["cost_usd"] <= 0.0015 + 1e-9
+    assert [st["steps"][s]["status"] for s in ("s1", "s2")] == ["done", "failed"]
+    assert "cannot cover the per-step reserve" in st["steps"]["s2"]["error"]
+    assert st["steps"]["s2"].get("attempts", []) == []  # s2 was never launched, so it paid nothing
+    assert {c[1] for c in env.calls() if c[0] == "step-start"} == {"s1"}
+
+
+def test_budget_big_enough_for_both_parallel_steps_runs_both(env, monkeypatch):
+    monkeypatch.setenv("FLOW_PLAN_MAX_USD", "0.002")
+    monkeypatch.setenv("FLOW_STEP_USD", "0.001")
+    env.script([step("s1", files=["a.py"]), step("s2", files=["b.py"])],
+               {"s1": {"files": {"a.py": "A = 1\n"}, "sleep": 1}, "s2": {"files": {"b.py": "B = 2\n"}, "sleep": 1}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) == "done"
+    st = json.loads((env.home / "plans" / pid / "state.json").read_text(encoding="utf-8"))
+    assert st["cost_usd"] <= 0.002 + 1e-9
+
+
+def test_dirty_repo_plan_warns_and_runs_from_the_commit(env):
+    (env.repo / "scratch.txt").write_text("not committed\n")
+    env.script([step("s1", files=["a.py"], acc="test -f a.py")], {"s1": {"files": {"a.py": "x=1\n"}}})
+    pid = plan.create("g")
+    st = json.loads((env.home / "plans" / pid / "state.json").read_text(encoding="utf-8"))
+    assert st["dirty_files"] == ["?? scratch.txt"]
+    assert json.loads((env.home / "plans" / pid / "plan.json").read_text(encoding="utf-8"))["dirty_files"] == ["?? scratch.txt"]
+    md = (env.home / "plans" / pid / "plan.md").read_text(encoding="utf-8")
+    assert "WARNING" in md and "?? scratch.txt" in md
+    assert plan.approve(pid, wait_for=True) == "done"
+    assert sh(env.repo, "git", "ls-tree", "--name-only", f"flow/{pid}").split() == ["README.md", "a.py"]  # scratch.txt is not merged
+
+
+def test_clean_repo_has_no_dirty_warning(env):
+    env.script([step("s1", files=["a.py"])], {"s1": {"files": {"a.py": "x=1\n"}}})
+    pid = plan.create("g")
+    assert "dirty_files" not in json.loads((env.home / "plans" / pid / "state.json").read_text(encoding="utf-8"))
+    assert "WARNING" not in (env.home / "plans" / pid / "plan.md").read_text(encoding="utf-8")
+
+
+def test_repo_with_no_commits_is_refused_with_a_clear_message(tmp_path, env, monkeypatch):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    sh(empty, "git", "init", "-q", "-b", "main")
+    monkeypatch.setenv("FLOW_WORKDIR", str(empty))
+    env.script([step("s1", files=["a.py"])], {"s1": {"files": {"a.py": "x=1\n"}}})
+    with pytest.raises(plan.PlanError, match="repo has no commits: make an initial commit first"):
+        plan.create("g")
+    assert not (env.home / "plans").exists() or not any((env.home / "plans").iterdir())  # nothing half-created
+
+
+def test_detached_head_plan_is_created_from_the_commit_sha(env):
+    sh(env.repo, "git", "checkout", "-q", "--detach")
+    env.script([step("s1", files=["a.py"], acc="test -f a.py")], {"s1": {"files": {"a.py": "x=1\n"}}})
+    pid = plan.create("g")
+    d = json.loads((env.home / "plans" / pid / "plan.json").read_text(encoding="utf-8"))
+    assert d["base"] == env.main_head and len(d["base"]) == 40
+    assert plan.approve(pid, wait_for=True) == "done"
+    assert sh(env.repo, "git", "rev-parse", f"flow/{pid}^1") == env.main_head

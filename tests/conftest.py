@@ -52,6 +52,14 @@ class _Handler(socketserver.StreamRequestHandler):
             self.wfile.write(out)
 
 
+@pytest.fixture(autouse=True)
+def isolated_agent_memory(monkeypatch, tmp_path_factory):
+    """Every test gets its own agent-system DB; the user's real memory is never touched."""
+    db_dir = tmp_path_factory.mktemp("agent_db")
+    monkeypatch.setenv("AGENT_SYSTEM_DB_DIR", str(db_dir))
+    return db_dir
+
+
 @pytest.fixture
 def fake_redis(monkeypatch, tmp_path):
     srv = socketserver.ThreadingTCPServer(("127.0.0.1", 0), _Handler)

@@ -1,5 +1,9 @@
+import json
 import os
+import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -31,6 +35,7 @@ def fakes(tmp_path, monkeypatch):
     monkeypatch.setenv("FLOW_PIN_BACKOFF_CAP", "0.01")
     monkeypatch.setenv("FAKE_PLAN", "/dev/null")
     monkeypatch.setenv("FAKE_STEPS", str(tmp_path / "steps.json"))
+    monkeypatch.setenv("FLOW_SLOT_DIR", str(tmp_path / "slots"))
     (tmp_path / "steps.json").write_text("{}")
     return tmp_path
 
@@ -129,3 +134,93 @@ def test_gemini_flash_parent_goes_lighter_only_when_gpt_oss_truly_unusable(fakes
     monkeypatch.setenv("FAKE_AGY_DEAD", f"{OSS},gemini-3.8-flash-high")
     res, _, _ = agents.call(chain, "planning agent", agents.Opts(str(fakes)), [])
     assert res.ok and res.backend == "agy:gemini-3.8-flash-low"
+
+
+def fake_claude_run(on_call):
+    """Stand-in for subprocess.run: a successful claude JSON answer; on_call(cmd) may raise or sleep."""
+    def run(cmd, **kw):
+        on_call(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps({"type": "result", "result": "ok", "is_error": False, "total_cost_usd": 0.0, "usage": {}}), stderr="")
+    return run
+
+
+def test_global_agent_cap_bounds_concurrent_subprocesses(fakes, monkeypatch):
+    monkeypatch.setenv("FLOW_MAX_AGENTS", "2")
+    monkeypatch.setenv("FLOW_CLAUDE", "claude-fake")  # never executed: subprocess.run is replaced below
+    lock, state = threading.Lock(), {"active": 0, "peak": 0}
+
+    def enter(cmd):
+        with lock:
+            state["active"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+        time.sleep(0.05)
+        with lock:
+            state["active"] -= 1
+
+    monkeypatch.setattr(agents.subprocess, "run", fake_claude_run(enter))
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(agents.call(["claude:haiku"], "p", agents.Opts(str(fakes)), []))) for _ in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(30)
+    assert len(results) == 5 and all(r[0].ok for r in results)
+    assert state["peak"] == 2  # capped at FLOW_MAX_AGENTS, and the cap was actually reached
+
+
+def test_slot_released_after_timeout_so_later_calls_still_run(fakes, monkeypatch):
+    monkeypatch.setenv("FLOW_MAX_AGENTS", "1")
+    monkeypatch.setenv("FLOW_CLAUDE", "claude-fake")
+
+    def hang(cmd):
+        raise subprocess.TimeoutExpired(cmd, 1)
+
+    monkeypatch.setattr(agents.subprocess, "run", fake_claude_run(hang))
+    with pytest.raises(subprocess.TimeoutExpired):
+        agents._run(["claude-fake"], agents.Opts(str(fakes)))
+    monkeypatch.setattr(agents.subprocess, "run", fake_claude_run(lambda cmd: None))
+    done = []
+    t = threading.Thread(target=lambda: done.append(agents._run(["claude-fake"], agents.Opts(str(fakes)))), daemon=True)
+    t.start()
+    t.join(10)
+    assert done and done[0].returncode == 0  # a leaked slot would hang here instead
+
+
+def test_slot_released_after_oserror(fakes, monkeypatch):
+    monkeypatch.setenv("FLOW_MAX_AGENTS", "1")
+
+    def missing(cmd, **kw):
+        raise OSError("exec failed")
+
+    monkeypatch.setattr(agents.subprocess, "run", missing)
+    with pytest.raises(OSError):
+        agents._run(["nope"], agents.Opts(str(fakes)))
+    monkeypatch.setattr(agents.subprocess, "run", fake_claude_run(lambda cmd: None))
+    assert agents._run(["ok"], agents.Opts(str(fakes))).returncode == 0
+
+
+def test_file_slot_shared_with_other_processes(fakes, monkeypatch):
+    import fcntl
+    monkeypatch.setenv("FLOW_MAX_AGENTS", "1")
+    slots = Path(os.environ["FLOW_SLOT_DIR"])
+    slots.mkdir(parents=True, exist_ok=True)
+    held = open(slots / "slot-0.lock", "a+")  # stands in for another plan runner process holding the only slot
+    fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    monkeypatch.setattr(agents.subprocess, "run", fake_claude_run(lambda cmd: None))
+    done = []
+    t = threading.Thread(target=lambda: done.append(agents._run(["x"], agents.Opts(str(fakes)))), daemon=True)
+    t.start()
+    t.join(0.3)
+    assert not done  # blocked while the other process holds the slot
+    fcntl.flock(held, fcntl.LOCK_UN)
+    held.close()
+    t.join(10)
+    assert done and done[0].returncode == 0
+
+
+def test_max_agents_env_parsing(monkeypatch):
+    monkeypatch.delenv("FLOW_MAX_AGENTS", raising=False)
+    assert agents.max_agents() == 4
+    for v, n in (("0", 1), ("-3", 1), ("7", 7), ("many", 4)):
+        monkeypatch.setenv("FLOW_MAX_AGENTS", v)
+        assert agents.max_agents() == n, v

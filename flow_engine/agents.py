@@ -14,7 +14,10 @@ import random
 import re
 import shutil
 import subprocess
+import tempfile
+import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -67,9 +70,78 @@ def _fail(msg, backend, force_transient=None):
     return Result(False, error=msg, transient=TRANSIENT.search(msg) is not None if force_transient is None else force_transient, backend=backend)
 
 
+# Global cap on concurrent agent subprocesses (FLOW_MAX_AGENTS, default 4, minimum 1).
+# Two layers: a threading.BoundedSemaphore for threads in this process, and one OS file lock per slot
+# (slot-0..N-1 under FLOW_SLOT_DIR, default <tempdir>/flow-agent-slots) so separate plan runners share the cap.
+# OS locks are released by the kernel when a process dies, so a killed runner never leaks a slot.
+_sem, _sem_n = None, 0
+_sem_lock = threading.Lock()
+
+
+def max_agents():
+    try:
+        n = int(os.environ.get("FLOW_MAX_AGENTS", "4"))
+    except ValueError:
+        n = 4
+    return max(1, n)
+
+
+def _acquire_file_slot(n):
+    d = Path(os.environ.get("FLOW_SLOT_DIR") or Path(tempfile.gettempdir()) / "flow-agent-slots")
+    d.mkdir(parents=True, exist_ok=True)
+    while True:
+        for i in range(n):
+            f = open(d / f"slot-{i}.lock", "a+")
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    f.seek(0)
+                    msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return f
+            except OSError:
+                f.close()
+        time.sleep(0.05)
+
+
+def _release_file_slot(f):
+    try:
+        if os.name == "nt":
+            import msvcrt
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(f, fcntl.LOCK_UN)
+    finally:
+        f.close()
+
+
+@contextmanager
+def _slot():
+    global _sem, _sem_n
+    n = max_agents()
+    with _sem_lock:
+        if _sem is None or _sem_n != n:
+            _sem, _sem_n = threading.BoundedSemaphore(n), n
+        sem = _sem
+    sem.acquire()
+    try:
+        f = _acquire_file_slot(n)
+        try:
+            yield
+        finally:
+            _release_file_slot(f)
+    finally:
+        sem.release()
+
+
 def _run(cmd, o, stdin=None, env=None):
-    return subprocess.run(cmd, input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                          timeout=o.timeout, cwd=o.workdir, env=env)
+    with _slot():  # only the subprocess itself holds a slot: backoff sleeps happen outside
+        return subprocess.run(cmd, input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=o.timeout, cwd=o.workdir, env=env)
 
 
 def run_claude(model, prompt, o):
