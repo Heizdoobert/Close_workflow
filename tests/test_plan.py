@@ -65,7 +65,8 @@ def env(tmp_path, monkeypatch):
     return e
 
 
-def step(i, deps=(), files=(), acc=""):
+def step(i, deps=(), files=(), acc=None):
+    acc = acc or f"test -f {files[0] if files else 'README.md'}"  # validate() rejects an empty acceptance
     return {"id": i, "title": f"do {i}", "reason": f"because {i} is needed", "deps": list(deps), "files": list(files), "acceptance": acc, "prompt": f"please do {i}"}
 
 
