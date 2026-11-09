@@ -11,8 +11,10 @@ import json
 import os
 import re
 import secrets
+import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
@@ -23,6 +25,9 @@ from flow_engine import agents, bridge, engine, gate
 ID = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 IDENT = ["-c", "user.name=flow-engine", "-c", "user.email=flow@localhost"]
 ADD = ["add", "-A", "--", ".", ":(exclude,glob)**/__pycache__/**", ":(exclude,glob)**/*.pyc", ":(exclude,glob).pytest_cache/**"]
+WIN_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+WIN_BAD_CHARS = re.compile(r'[<>:"|?*]')
+ACCEPT_TAIL_BYTES = 64 * 1024  # per stream; only the last part is kept for the report and the retry prompt
 
 
 class PlanError(Exception):
@@ -85,6 +90,36 @@ def extract_json(text):
         raise PlanError(f"invalid JSON: {e}")
 
 
+def unsafe_path_reason(f):
+    """Why a step file path is unsafe, or None. Checks escape (absolute, '..') and Windows-unsafe names, since a plan made on Linux may be merged on Windows."""
+    if not f.strip():
+        return "empty path"
+    if Path(f).is_absolute() or f.startswith(("/", "\\")):
+        return "absolute path"
+    parts = [p for p in re.split(r"[\\/]+", f) if p not in ("", ".")]
+    if ".." in parts:
+        return "escapes the worktree"
+    for p in parts:
+        if WIN_BAD_CHARS.search(p):
+            return f"Windows-invalid character in {p!r}"
+        if p.endswith((".", " ")):
+            return f"Windows-invalid name {p!r} (ends with dot or space)"
+        if p.split(".", 1)[0].upper() in WIN_RESERVED:
+            return f"Windows reserved device name {p!r}"
+    return None
+
+
+def escaping_paths(wt, rels):
+    """Paths whose real location (symlinks followed) is outside the worktree wt."""
+    root = os.path.realpath(wt)
+    bad = []
+    for r in rels:
+        real = os.path.realpath(os.path.join(wt, r))
+        if real != root and not real.startswith(root + os.sep):
+            bad.append(r)
+    return bad
+
+
 def validate(plan, max_steps=None):
     """Normalise and check a plan: ids, required text, safe relative paths, existing deps, no cycles."""
     max_steps = max_steps or int(os.environ.get("FLOW_MAX_STEPS", "8"))
@@ -96,7 +131,7 @@ def validate(plan, max_steps=None):
         if not isinstance(s, dict):
             raise PlanError("step is not an object")
         sid = str(s.get("id", ""))
-        if not ID.match(sid) or sid in ids:
+        if not sid.strip() or not ID.match(sid) or sid in ids:
             raise PlanError(f"bad or duplicate step id {sid!r}")
         ids.append(sid)
         s["id"] = sid
@@ -106,8 +141,9 @@ def validate(plan, max_steps=None):
         s["deps"] = [str(d) for d in (s.get("deps") or [])]
         s["files"] = [str(f) for f in (s.get("files") or [])]
         for f in s["files"]:
-            if Path(f).is_absolute() or ".." in Path(f).parts or f.startswith(("/", "\\")):
-                raise PlanError(f"step {sid}: unsafe path {f!r}")
+            why = unsafe_path_reason(f)
+            if why:
+                raise PlanError(f"step {sid}: unsafe path {f!r} ({why})")
         s["acceptance"] = str(s.get("acceptance") or "").strip()
     for s in steps:
         for d in s["deps"]:
@@ -260,15 +296,46 @@ class Ctx:
         return self.state.get("cost_usd", 0)
 
 
+def _new_group():
+    """Popen kwargs that put the child in its own process group, so a timeout can kill its children too."""
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def _kill_group(p):
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], capture_output=True)
+    else:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)  # session leader: its process group id is its pid
+        except OSError:
+            pass  # already gone
+    p.kill()
+    p.wait()
+
+
+def _tail(f):
+    """Last ACCEPT_TAIL_BYTES of an output file; a huge output is never read into memory whole."""
+    f.seek(0, os.SEEK_END)
+    f.seek(max(0, f.tell() - ACCEPT_TAIL_BYTES))
+    return f.read().decode("utf-8", errors="replace")
+
+
 def accept(step, wt):
     cmd = step["acceptance"]
     if not cmd:
         return {"cmd": "", "ok": True, "skipped": True}
-    try:
-        p = subprocess.run(cmd, shell=True, cwd=wt, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=int(os.environ.get("FLOW_ACCEPT_TIMEOUT", "300")))
-    except subprocess.TimeoutExpired:
-        return {"cmd": cmd, "ok": False, "rc": None, "tail": "timeout"}
-    return {"cmd": cmd, "ok": p.returncode == 0, "rc": p.returncode, "tail": (p.stdout + p.stderr).strip()[-600:]}
+    # output goes to files, not pipes: a grandchild that outlives the kill cannot keep us waiting on an open pipe
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        p = subprocess.Popen(cmd, shell=True, cwd=wt, stdin=subprocess.DEVNULL, stdout=out, stderr=err, **_new_group())
+        try:
+            p.wait(timeout=int(os.environ.get("FLOW_ACCEPT_TIMEOUT", "300")))
+        except subprocess.TimeoutExpired:
+            _kill_group(p)
+            return {"cmd": cmd, "ok": False, "rc": None, "tail": "timeout"}
+        tail = (_tail(out) + _tail(err)).strip()[-600:]
+    return {"cmd": cmd, "ok": p.returncode == 0, "rc": p.returncode, "tail": tail}
 
 
 def _gate_line(g):
@@ -351,6 +418,11 @@ def do_step(ctx, step, rescued=False):
     for l in ns:
         st, path = l.split("\t", 1)[0], l.split("\t")[-1]
         files.append({"status": st, "path": path, "added": num.get(path, ("?", "?"))[0], "removed": num.get(path, ("?", "?"))[1]})
+    bad_links = escaping_paths(str(wt), [f["path"] for f in files])  # a symlink to outside the worktree must not be merged
+    if bad_links:
+        ev.update(status="failed", error=f"changed path leads outside the step worktree (symlink): {bad_links[:5]}", worktree=str(wt))
+        ctx.save()
+        return False
     declared = set(step["files"])
     ev.update(files=files, commit=sha[:10], outside_plan=sorted(f["path"] for f in files if declared and f["path"] not in declared))
     with ctx.mlock:

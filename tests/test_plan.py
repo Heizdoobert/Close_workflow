@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -284,3 +285,109 @@ def test_reject_refuses_a_running_plan(env):
     plan.approve(pid, wait_for=True)
     with pytest.raises(plan.PlanError, match="only a plan awaiting"):
         plan.reject(pid)
+
+
+def _alive(pid):
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            return f.read().rsplit(")", 1)[1].split()[0] != "Z"  # a zombie has exited; only its parent has not reaped it yet
+    except OSError:  # gone between open() and read() (ProcessLookupError), or no /proc at all
+        pass
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def _wait_dead(pid):
+    deadline = time.time() + 5
+    while _alive(pid) and time.time() < deadline:
+        time.sleep(0.05)
+    return not _alive(pid)
+
+
+def test_acceptance_timeout_kills_the_hung_grandchild_too(tmp_path, monkeypatch):
+    monkeypatch.setenv("FLOW_ACCEPT_TIMEOUT", "1")
+    pidfile = tmp_path / "gc.pid"
+    r = plan.accept({"acceptance": f"sleep 60 & echo $! > {pidfile}; wait"}, str(tmp_path))
+    assert r["ok"] is False and r["rc"] is None and r["tail"] == "timeout"
+    assert _wait_dead(int(pidfile.read_text())), "a grandchild of a timed-out acceptance command survived"
+
+
+def test_acceptance_grandchild_holding_output_does_not_block(tmp_path, monkeypatch):
+    monkeypatch.setenv("FLOW_ACCEPT_TIMEOUT", "1")
+    pidfile = tmp_path / "gc.pid"
+    t0 = time.time()
+    r = plan.accept({"acceptance": f"sleep 60 & echo $! > {pidfile}; sleep 60"}, str(tmp_path))
+    assert r["tail"] == "timeout" and time.time() - t0 < 15
+    assert _wait_dead(int(pidfile.read_text()))
+
+
+def test_acceptance_huge_output_is_capped_and_keeps_the_end(tmp_path):
+    py = shlex.quote(sys.executable)
+    r = plan.accept({"acceptance": f"{py} -c \"import sys; sys.stdout.write('x' * (8 * 1024 * 1024) + 'END\\n'); sys.stderr.write('ERR\\n')\""}, str(tmp_path))
+    assert r["ok"] is True and r["rc"] == 0
+    assert len(r["tail"]) <= 600 and r["tail"].endswith("END\nERR")
+
+
+def test_acceptance_failure_still_reports_rc_and_tail(tmp_path):
+    py = shlex.quote(sys.executable)
+    r = plan.accept({"acceptance": f"{py} -c \"import sys; print('nope'); sys.exit(3)\""}, str(tmp_path))
+    assert r["ok"] is False and r["rc"] == 3 and r["tail"] == "nope"
+
+
+def test_output_tail_reads_at_most_the_cap(tmp_path):
+    f = tmp_path / "big"
+    f.write_bytes(b"a" * (1024 * 1024) + b"TAIL")
+    with open(f, "rb") as fh:
+        t = plan._tail(fh)
+    assert len(t) <= plan.ACCEPT_TAIL_BYTES and t.endswith("TAIL")
+
+
+@pytest.mark.parametrize("path", ["CON", "con.txt", "PRN.py", "aux/x.py", "NUL", "nul.tar.gz", "COM1", "com9.log", "LPT1.txt", "lpt9", "dir/CON.md"])
+def test_validate_rejects_windows_reserved_device_names(path):
+    with pytest.raises(plan.PlanError, match="unsafe path"):
+        plan.validate({"steps": [step("a", files=[path])]})
+
+
+@pytest.mark.parametrize("path", ["a<b.py", "a>b", "a:b", 'a"b', "a|b", "a?b", "a*b", "dir:stream/x.py", "x\\y:z.py"])
+def test_validate_rejects_windows_invalid_characters(path):
+    with pytest.raises(plan.PlanError, match="unsafe path"):
+        plan.validate({"steps": [step("a", files=[path])]})
+
+
+@pytest.mark.parametrize("path", ["dir./x.py", "file.py.", "file.py ", "dir /x.py", "a/b. /c"])
+def test_validate_rejects_components_ending_in_dot_or_space(path):
+    with pytest.raises(plan.PlanError, match="unsafe path"):
+        plan.validate({"steps": [step("a", files=[path])]})
+
+
+def test_validate_rejects_backslash_traversal_on_any_os():
+    with pytest.raises(plan.PlanError, match="unsafe path"):
+        plan.validate({"steps": [step("a", files=["..\\secret.txt"])]})
+
+
+@pytest.mark.parametrize("path", ["", "   ", "\t"])
+def test_validate_rejects_empty_or_whitespace_paths_and_ids(path):
+    with pytest.raises(plan.PlanError):
+        plan.validate({"steps": [step("a", files=[path])]})
+    with pytest.raises(plan.PlanError):
+        plan.validate({"steps": [step(path or " ")]})
+
+
+def test_validate_keeps_ordinary_paths_working():
+    ok = ["flow_engine/plan.py", "tests/test_plan.py", "CONFIG.py", "COM10.txt", "console.py", "a.b/c-d_e.txt", "./x.py", "docs/AGENTIC_GAPS.md", "auxiliary/nullable.py"]
+    assert plan.validate({"steps": [step("a", files=ok)]})
+
+
+def test_symlink_pointing_outside_the_worktree_is_detected(tmp_path):
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("secret")
+    (wt / "ok.py").write_text("x = 1\n")
+    (wt / "inner").symlink_to(wt / "ok.py")
+    (wt / "link").symlink_to(outside)
+    (wt / "dir_link").symlink_to(tmp_path)
+    assert plan.escaping_paths(str(wt), ["ok.py", "inner", "new.py", "link", "dir_link/outside.txt"]) == ["link", "dir_link/outside.txt"]
