@@ -1,9 +1,10 @@
 """plan -> human approval -> sub-agents in isolated git worktrees (parallel where independent) -> evidence report.
 
-Layout, per plan: <ROOT>/plans/<pid>/{plan.json, plan.md, state.json, run.log, run.lock, report.md, report.json, wt/}
+Layout, per plan: <ROOT>/plans/<pid>/{plan.json, plan.md, state.json, STATUS.md, run.log, run.lock, report.md, report.json, journal/, wt/}
 Git: branch flow/<pid> holds the merged result; each step works on flowstep/<pid>/<step> in its own worktree and is merged
 only after its gates and acceptance command pass. Nothing touches your current branch: you review and merge flow/<pid>.
 state.json is the source of truth (Redis is a best-effort mirror), so a crashed runner can be resumed.
+journal/<sid>.jsonl keeps one line per attempt, so a retried or resumed step knows what it already tried.
 """
 
 import hashlib
@@ -20,7 +21,7 @@ import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from flow_engine import agents, bridge, engine, gate
+from flow_engine import agents, bridge, engine, gate, journal
 
 ID = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 IDENT = ["-c", "user.name=flow-engine", "-c", "user.email=flow@localhost"]
@@ -57,6 +58,10 @@ Files you are expected to touch: {files}
 Instructions: {prompt}
 {deps}Acceptance check (it will be run for you afterwards): {acceptance}
 When finished, verify your own work, then reply in 2-4 sentences: what you changed and what the check showed. Do not commit. Do not touch anything outside this directory."""
+EARLIER = "Earlier attempts at this step (do not repeat what failed):"
+REFLECT = "First, open your reply with one line 'REFLECTION: <what failed>, <why>, <what I change>'. Then make the fix."
+SAME_TWICE = "The same failure happened twice: change your approach, do not repeat the last edit."
+WHERE_LIMIT = 1500  # `flow-task where` and STATUS.md stay small enough to read in one look
 
 
 def plans_dir():
@@ -398,6 +403,63 @@ def _cleanup(ctx, sid):
     git(ctx.repo, "branch", "-D", f"flowstep/{ctx.pid}/{sid}", check=False)
 
 
+def _junk(p):
+    parts = Path(p).parts
+    return "__pycache__" in parts or ".pytest_cache" in parts or p.endswith(".pyc")
+
+
+def _touched(wt):
+    """Files this attempt changed in the step worktree so far: tracked changes and new files, build junk left out."""
+    names = git(wt, "diff", "--name-only", "HEAD", check=False).stdout.splitlines() + git(wt, "ls-files", "-o", "--exclude-standard", check=False).stdout.splitlines()
+    return sorted({n for n in names if n and not _junk(n)})[:20]
+
+
+def _drift(step, paths):
+    """Committed files the plan did not list. A test file for a listed file (tests/test_<stem>.py) is expected; junk never counts."""
+    declared = step["files"]
+    if not declared:
+        return []
+    ok_tests = {f"test_{Path(f).stem}.py" for f in declared}
+    return sorted(p for p in paths if p not in declared and not _junk(p) and not (p.startswith("tests/") and Path(p).name in ok_tests))
+
+
+def _reflection(text):
+    """The 'REFLECTION: ...' line an agent opened its reply with, redacted and cut to 300 chars, or ''."""
+    m = re.search(r"^[ \t]*REFLECTION:.*$", text or "", re.M)
+    return redact(m.group(0).strip())[:300] if m else ""
+
+
+def _fail_hash(fb):
+    """Identity of a failure: digits stripped, so a line number or a timestamp moving does not make a new failure."""
+    return hashlib.sha256(re.sub(r"\d+", "", fb).encode()).hexdigest()[:12]
+
+
+def _streak(prior):
+    """How many identical failures in a row end the journal, and the hash of the last one. Any entry without a hash ends a streak."""
+    n, last = 0, None
+    for e in prior:
+        h = e.get("hash")
+        n = (n + 1 if h == last else 1) if h else 0
+        last = h or None
+    return n, last
+
+
+def _attempt_failure(ev):
+    """Why the newest attempt failed (agent error, failed gates or the acceptance tail), or ''."""
+    if not ev.get("attempts"):
+        return ""
+    a = ev["attempts"][-1]
+    if "agent_error" in a:
+        return a["agent_error"]
+    if not a.get("gates_ok", True):
+        return f"gates [{a['gates']}]"
+    ac = a.get("acceptance", {})
+    if not ac.get("ok", True):
+        lines = (ac.get("tail") or "").strip().splitlines()
+        return f"acceptance rc={ac.get('rc')} {lines[-1] if lines else ''}"
+    return ""
+
+
 def do_step(ctx, step, rescued=False):
     sid = step["id"]
     wt, br = ctx.d / "wt" / sid, f"flowstep/{ctx.pid}/{sid}"  # not under flow/<pid>/: git refuses a ref that is also a directory
@@ -407,6 +469,8 @@ def do_step(ctx, step, rescued=False):
         _cleanup(ctx, sid)
         git(ctx.repo, "worktree", "add", "-q", "-b", br, str(wt), base_sha)
     ev.update(status="running", started=engine.now(), base=base_sha[:10], branch=br, attempts=[], api=ev.get("api", []))
+    for k in ("stuck", "drift", "reflection"):  # per run: a retry or a resume starts these over
+        ev.pop(k, None)
     ctx.save()
     t0 = time.time()
     done = {k: v for k, v in ctx.state["steps"].items() if v["status"] == "done"}
@@ -415,7 +479,14 @@ def do_step(ctx, step, rescued=False):
     base_prompt = STEP_PROMPT.format(goal=ctx.plan["goal"], id=sid, title=step["title"], reason=step["reason"], files=", ".join(step["files"]) or "(not specified)",
                                      prompt=step["prompt"], deps=dep_txt + note, acceptance=step["acceptance"] or "none")
     base_prompt = bridge.recall(f"{step['title']} {step['prompt'][:200]}") + base_prompt
+    # the worktree was just made fresh: an earlier run, retry or rescue of this step left its attempts in the journal, so the agent is told them
+    prior = journal.read(ctx.pid, sid)
+    streak, last_hash = _streak(prior)
+    if prior:
+        base_prompt = f"{EARLIER}\n{journal.brief(ctx.pid, sid)}\n\n{base_prompt}"
     prompt, passed, summary, error, first_fail, failed_names = base_prompt, False, "", "", "", ""
+    if streak >= 2:
+        prompt += f"\n\n{SAME_TWICE}"
     for n in range(1, int(os.environ.get("FLOW_RETRIES", "2")) + 2):
         cap = ctx.cap(sid)  # this step's reservation, minus what it has already paid
         if cap <= 0:
@@ -428,20 +499,35 @@ def do_step(ctx, step, rescued=False):
         if not res.ok:
             error = redact(res.error)
             ev["attempts"].append({"n": n, "agent_error": redact(res.error)[:300]})
+            journal.append(ctx.pid, sid, {"n": n, "status": "agent-error", "backend": res.backend, "error": res.error[:300]})
             break
         summary = redact(res.text.strip())
+        reflection = _reflection(res.text)
+        if reflection:
+            ev["reflection"] = reflection
         g = gate.run_gates(str(wt))
         acc = accept(step, str(wt))
         ev["attempts"].append({"n": n, "gates": _gate_line(g), "gates_ok": g["ok"], "acceptance": acc})
         ctx.save()
         if g["ok"] and acc["ok"]:
             passed = True
+            journal.append(ctx.pid, sid, {"n": n, "status": "passed", "backend": res.backend, "files": _touched(str(wt)), "summary": summary[:300], "reflection": reflection})
             break
         fb = f"Gates: {_gate_line(g)}\nAcceptance `{acc['cmd']}` rc={acc.get('rc')}:\n{acc.get('tail', '')[-500:]}"
         first_fail = first_fail or fb
         failed_names = ",".join([k for k, x in g["gates"].items() if not x.get("skipped") and not x["ok"]] + ([] if acc["ok"] else ["acceptance"]))
+        fh = _fail_hash(fb)
+        streak, last_hash = (streak + 1 if fh == last_hash else 1), fh
+        journal.append(ctx.pid, sid, {"n": n, "status": "gate-failed" if not g["ok"] else "acceptance-failed", "backend": res.backend, "failed": failed_names.split(","),
+                                      "files": _touched(str(wt)), "summary": summary[:300], "reflection": reflection, "hash": fh})
+        if streak >= 3:  # the same failure three times in a row: another attempt would only repeat it
+            error = "stuck: identical failure repeated 3 times"
+            ev["stuck"] = True
+            journal.append(ctx.pid, sid, {"n": n, "status": "stuck"})
+            break
         hint = bridge.get_recipe(failed_names)  # reflection: what fixed this kind of failure before
-        prompt = f"{base_prompt}\n\nYour previous attempt did not pass the automated checks. Fix this:\n{fb}" + (f"\n\nWorked before for the same failure:\n{hint}" if hint else "")
+        prompt = (f"{base_prompt}\n\nYour previous attempt did not pass the automated checks. Fix this:\n{fb}" + (f"\n\n{SAME_TWICE}" if streak == 2 else "")
+                  + f"\n\n{REFLECT}" + (f"\n\nWorked before for the same failure:\n{hint}" if hint else ""))
         if hint:
             ev["recipe_used"] = failed_names
     ev.update(summary=redact(summary)[:1200], duration_s=round(time.time() - t0, 1))
@@ -478,6 +564,9 @@ def do_step(ctx, step, rescued=False):
         return False
     declared = set(step["files"])
     ev.update(files=files, commit=sha[:10], outside_plan=sorted(f["path"] for f in files if declared and f["path"] not in declared))
+    ev["drift"] = _drift(step, [f["path"] for f in files])  # warning only: the merge goes ahead
+    if ev["drift"]:
+        journal.append(ctx.pid, sid, {"n": len(ev["attempts"]), "status": "drift", "drift": ev["drift"]})
     with ctx.mlock:
         m = git(ctx.plan_wt, *IDENT, "merge", "--no-ff", "-q", "-m", f"merge step {sid}: {step['title']}", br, check=False)
         if m.returncode:
@@ -577,6 +666,7 @@ def run(pid):
                         state["steps"][sid].update(status="failed", error=f"{type(e).__name__}: {e}"[:300])
                     engine.log(json.dumps({"ts": engine.now(), "event": "plan_step", "plan": pid, "step": sid, "status": state["steps"][sid]["status"]}))
                     ctx.save()
+                    write_status(pid)
         state["duration_s"] = round(state.get("duration_s", 0) + time.time() - t0, 1)
         sts = [v["status"] for v in state["steps"].values()]
         state["integration"] = integrate(ctx) if "done" in sts else None  # nothing merged = nothing to integrate
@@ -588,6 +678,7 @@ def run(pid):
         state["finished"] = engine.now()
         ctx.save()
         report(pid)
+        write_status(pid)
         _mirror(pid, status=state["status"], cost_usd=round(ctx.spent, 6))
         engine.log(json.dumps({"ts": engine.now(), "event": "plan", "plan": pid, "status": state["status"], "cost_usd": round(ctx.spent, 6)}))
         lock.close()
@@ -659,6 +750,11 @@ def report(pid):
             L.append(f"- reflection: dùng recipe cũ `flow-gate:{ev['recipe_used']}` ở lần thử lại")
         if ev.get("recipe_recorded"):
             L.append(f"- reflection: đã ghi recipe `flow-gate:{ev['recipe_recorded']}`")
+        if ev.get("attempts"):
+            flags = [f"attempts {len(ev['attempts'])}"] + (["stuck"] if ev.get("stuck") else []) + ([f"drift: {', '.join(ev['drift'])}"] if ev.get("drift") else [])
+            L.append("- reflection: " + " | ".join(flags))
+        if ev.get("reflection"):
+            L.append(f"- {ev['reflection']}")
         if ev.get("error"):
             L.append(f"- lỗi: {ev['error']}")
     integ = st.get("integration")
@@ -669,3 +765,67 @@ def report(pid):
     (d / "report.md").write_text(redact("\n".join(L) + "\n"), encoding="utf-8")
     _atomic(d / "report.json", redact(json.dumps({"plan": plan, "state": st}, indent=2, ensure_ascii=False)))
     return d / "report.md"
+
+
+def _next_action(pid, st, d):
+    if st == "awaiting_approval":
+        return f"flow-task approve {pid}  (or edit plans/{pid}/plan.json first)"
+    if st in ("approved", "running"):
+        return f"wait; check with flow-task status {pid}"
+    if st in ("failed", "partial"):
+        return f"flow-task retry {pid}  (merged steps stay, failed ones run again)"
+    if st == "done":
+        return f"review flow/{pid}; report: {d / 'report.md'}"
+    return f"none (plan is {st})"
+
+
+def where_text(pid, plan_, state, d, limit=WHERE_LIMIT):
+    """Where a plan stands, one step per line and one Next action; the same text goes to `flow-task where` and STATUS.md."""
+    st = state["status"]
+    head = [f"Plan {pid}: {st}  branch flow/{pid}", f"Goal: {' '.join(plan_['goal'].split())[:200]}"]
+    steps = []
+    for s in plan_["steps"]:
+        ev = state["steps"].get(s["id"], {})
+        why = ev.get("error", "") if ev.get("stuck") else (_attempt_failure(ev) or ev.get("error", ""))
+        why = " ".join(why.split())[:80]
+        steps.append(f"{s['id']} {ev.get('status', 'pending')} {len(ev.get('attempts', []))} {why}".rstrip())
+    nxt = f"Next: {_next_action(pid, st, d)}"
+    budget = limit - len(nxt.encode("utf-8")) - 8  # room for the "..." marker that a long plan gets
+    out, used = [], 0
+    for line in head + steps:
+        size = len(line.encode("utf-8")) + 1
+        if used + size > budget:
+            out.append("...")
+            break
+        out.append(line)
+        used += size
+    return "\n".join(out + [nxt])
+
+
+def latest_here():
+    """Newest plan of the caller's repo. Plan ids start with a timestamp, so reverse name order is newest first."""
+    here = os.path.realpath(repo())
+    for sf in sorted(plans_dir().glob("*/state.json"), reverse=True):
+        try:
+            p = json.loads((sf.parent / "plan.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if p.get("repo") and os.path.realpath(p["repo"]) == here:
+            return sf.parent.name
+    raise PlanError('no plan for this repo yet; start one with: flow-task plan "<goal>"')
+
+
+def where(pid=None):
+    """`flow-task where`: the given plan, else the newest plan of the caller's repo."""
+    pid = pid or latest_here()
+    d, plan_, state = load(pid)
+    return where_text(pid, plan_, state, d)
+
+
+def write_status(pid):
+    """STATUS.md next to state.json: the `where` text, so a new or compacted session reads one small file."""
+    d, plan_, state = load(pid)
+    try:
+        _atomic(d / "STATUS.md", where_text(pid, plan_, state, d))
+    except OSError:
+        pass  # a status file is a convenience; state.json is the truth

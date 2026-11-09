@@ -13,6 +13,7 @@ USAGE = ('usage: flow-task "<task message>"      store a task (with FLOW_EXEC=1 
          '       flow-task enqueue "<message>"   store + queue for the listener, prints the id\n'
          "       flow-task status <id> | listen | gate [dir] | doctor | exec <id> <message>\n"
          '       flow-task plan "<goal>" [--model <your model id>]   draft a plan (nothing runs until approve)\n'
+         "       flow-task where [<plan>]   where a plan stands and the next action (default: newest plan of this repo)\n"
          "       flow-task show <plan> | approve <plan> [--wait] | retry <plan> | reject <plan> | report <plan> | run <plan> | plans")
 
 
@@ -73,6 +74,9 @@ def main(argv=None):
             goal = " ".join(r for i, r in enumerate(rest) if r != "--model" and (i == 0 or rest[i - 1] != "--model"))
             pid = plan.create(goal, model)
             print(plan.show(pid))
+            return 0
+        if cmd == "where" and len(rest) <= 1:  # more words would be a task message ("where is the bug"): falls through to submit
+            print(plan.where(rest[0] if rest else None))
             return 0
         if cmd == "show" and rest:
             print(plan.show(rest[0]))
