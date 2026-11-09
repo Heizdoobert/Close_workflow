@@ -284,3 +284,41 @@ def test_reject_refuses_a_running_plan(env):
     plan.approve(pid, wait_for=True)
     with pytest.raises(plan.PlanError, match="only a plan awaiting"):
         plan.reject(pid)
+
+
+@pytest.mark.parametrize("gitignore", ["", ".pytest_cache\n__pycache__\n"])
+def test_step_that_runs_pytest_is_committed_with_or_without_gitignore(env, gitignore):
+    """Regression: `git add` with an exclude-pathspec failed when .gitignore listed .pytest_cache, so every pytest step was marked failed."""
+    if gitignore:
+        (env.repo / ".gitignore").write_text(gitignore)
+        sh(env.repo, "git", "add", ".gitignore")
+        sh(env.repo, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore")
+    env.script([step("s1", files=["a.py"], acc="test -f a.py")],
+               {"s1": {"files": {"a.py": "1\n", ".pytest_cache/v/x": "junk\n", "__pycache__/a.cpython-311.pyc": "junk\n"}}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) == "done"
+    tree = sh(env.repo, "git", "ls-tree", "-r", "--name-only", f"flow/{pid}")
+    assert "a.py" in tree.split() and "pytest_cache" not in tree and ".pyc" not in tree
+
+
+def test_retry_reruns_only_the_failed_steps_of_a_failed_plan(env, monkeypatch):
+    monkeypatch.setenv("FLOW_RETRIES", "0")
+    env.script([step("a", files=["a.py"], acc="grep -q GOOD a.py"), step("b", files=["b.py"], acc="test -f b.py")],
+               {"a": {"files": {"a.py": "BAD\n"}}, "b": {"files": {"b.py": "1\n"}}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) == "partial"
+    with pytest.raises(plan.PlanError, match="not awaiting approval"):  # approve is not the way back in
+        plan.approve(pid)
+    before = len(env.calls())
+    env.script([step("a", files=["a.py"], acc="grep -q GOOD a.py"), step("b", files=["b.py"], acc="test -f b.py")], {"a": {"files": {"a.py": "GOOD\n"}}, "b": {"files": {"b.py": "2\n"}}})
+    plan.retry(pid)
+    sf = env.home / "plans" / pid / "state.json"
+    for _ in range(200):
+        st = json.loads(sf.read_text())
+        if st["status"] in ("done", "failed", "partial"):
+            break
+        time.sleep(0.2)
+    assert st["status"] == "done", st
+    assert st["retries"] == 1 and st["steps"]["a"]["previous"]["status"] == "failed"
+    assert sh(env.repo, "git", "show", f"flow/{pid}:b.py") == "1"  # step b was kept, not re-run
+    assert [c[1] for c in env.calls()[before:] if c[0] == "step-start"] == ["a"]  # only step a ran again

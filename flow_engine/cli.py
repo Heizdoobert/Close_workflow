@@ -13,7 +13,7 @@ USAGE = ('usage: flow-task "<task message>"      store a task (with FLOW_EXEC=1 
          '       flow-task enqueue "<message>"   store + queue for the listener, prints the id\n'
          "       flow-task status <id> | listen | gate [dir] | doctor | exec <id> <message>\n"
          '       flow-task plan "<goal>" [--model <your model id>]   draft a plan (nothing runs until approve)\n'
-         "       flow-task show <plan> | approve <plan> [--wait] | reject <plan> | report <plan> | run <plan> | plans")
+         "       flow-task show <plan> | approve <plan> [--wait] | retry <plan> | reject <plan> | report <plan> | run <plan> | plans")
 
 
 def doctor():
@@ -81,6 +81,10 @@ def main(argv=None):
             out = plan.approve(rest[0], "--wait" in rest)
             print(out if out != "started" else f"approved: running in the background. Check: flow-task status {rest[0]}")
             return 0 if out in ("started", "done") else 1
+        if cmd == "retry" and rest:
+            plan.retry(rest[0])
+            print(f"retrying the failed steps in the background. Check: flow-task status {rest[0]}")
+            return 0
         if cmd == "reject" and rest:
             plan.reject(rest[0])
             return 0

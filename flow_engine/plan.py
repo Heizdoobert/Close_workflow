@@ -22,7 +22,7 @@ from flow_engine import agents, bridge, engine, gate
 
 ID = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 IDENT = ["-c", "user.name=flow-engine", "-c", "user.email=flow@localhost"]
-ADD = ["add", "-A", "--", ".", ":(exclude,glob)**/__pycache__/**", ":(exclude,glob)**/*.pyc", ":(exclude,glob).pytest_cache/**"]
+JUNK = [":(glob)**/__pycache__/**", ":(glob)**/*.pyc", ":(glob).pytest_cache/**"]  # build junk a repo without a .gitignore would otherwise commit
 
 
 class PlanError(Exception):
@@ -212,6 +212,24 @@ def approve(pid, wait_for=False):
     return "started"
 
 
+def retry(pid):
+    """Re-run a failed/partial plan: steps already merged stay, every other step starts again in a fresh worktree."""
+    d, plan, state = load(pid)
+    if state["status"] not in ("failed", "partial"):
+        raise PlanError(f"plan is {state['status']}; only a failed or partial plan can be retried")
+    for ev in state["steps"].values():
+        if ev["status"] != "done":
+            old = {k: ev[k] for k in ("status", "error") if ev.get(k)}
+            ev.clear()
+            ev.update(status="pending", previous=old)
+    for k in ("integration", "error", "finished"):
+        state.pop(k, None)
+    state.update(status="approved", retries=state.get("retries", 0) + 1)
+    _atomic(d / "state.json", json.dumps(state, indent=2, ensure_ascii=False))
+    _mirror(pid, status="approved")
+    spawn(pid)
+
+
 def reject(pid):
     d, plan, state = load(pid)
     if state["status"] != "awaiting_approval":
@@ -336,8 +354,10 @@ def do_step(ctx, step, rescued=False):
         ev.update(status="failed", error=error or "gates/acceptance still failing after retries", worktree=str(wt))
         ctx.save()
         return False
-    git(str(wt), *ADD)
-    changed = git(str(wt), "status", "--porcelain").stdout.strip()
+    # plain `add -A` (honours .gitignore); an exclude-pathspec makes git fail when .gitignore also lists the excluded path
+    git(str(wt), "add", "-A")
+    git(str(wt), "rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", *JUNK)
+    changed = git(str(wt), "diff", "--cached", "--name-only").stdout.strip()
     if not changed and not step["acceptance"]:
         ev.update(status="failed", error="agent made no changes and the step has no acceptance command")
         ctx.save()
