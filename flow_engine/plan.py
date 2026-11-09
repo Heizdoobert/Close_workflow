@@ -143,8 +143,22 @@ def escaping_paths(wt, rels):
     return bad
 
 
+TRIVIAL_SEGMENT = re.compile(r"(true|:|exit(\s+\d+)?|(echo|printf)(\s.*)?)")
+
+
+def trivial_acceptance_reason(cmd):
+    """Why an acceptance command proves nothing ('' when it can really fail): empty, or every segment is true, :, exit N, echo or printf."""
+    segments = [s.strip() for s in re.split(r"&&|\|\||;|\|", cmd or "")]
+    segments = [s for s in segments if s]
+    if not segments:
+        return "empty acceptance command"
+    if all(TRIVIAL_SEGMENT.fullmatch(s) for s in segments):
+        return f"trivial acceptance command {cmd.strip()!r} proves nothing"
+    return ""
+
+
 def validate(plan, max_steps=None):
-    """Normalise and check a plan: ids, required text, safe relative paths, existing deps, no cycles."""
+    """Normalise and check a plan: ids, required text, safe relative paths, existing deps, no cycles, real acceptance."""
     max_steps = max_steps or int(os.environ.get("FLOW_MAX_STEPS", "8"))
     steps = plan.get("steps") if isinstance(plan, dict) else None
     if not isinstance(steps, list) or not 1 <= len(steps) <= max_steps:
@@ -168,6 +182,9 @@ def validate(plan, max_steps=None):
             if why:
                 raise PlanError(f"step {sid}: unsafe path {f!r} ({why})")
         s["acceptance"] = str(s.get("acceptance") or "").strip()
+        why = trivial_acceptance_reason(s["acceptance"])
+        if why:
+            raise PlanError(f"step {sid}: {why}")
     for s in steps:
         for d in s["deps"]:
             if d not in ids or d == s["id"]:
