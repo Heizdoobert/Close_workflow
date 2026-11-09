@@ -22,6 +22,8 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 from flow_engine import agents, bridge, engine, gate, journal
+# SECRET_PATTERNS and redact live in secrets.py; they stay importable from here
+from flow_engine.secrets import SECRET_PATTERNS, redact
 
 ID = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 IDENT = ["-c", "user.name=flow-engine", "-c", "user.email=flow@localhost"]
@@ -30,17 +32,6 @@ WIN_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), 
 WIN_BAD_CHARS = re.compile(r'[<>:"|?*]')
 SECRET_ENV = re.compile(r"(?i)(KEY|TOKEN|SECRET|PASSW|CREDENTIAL|AUTH)")
 ACCEPT_TAIL_BYTES = 64 * 1024  # per stream; only the last part is kept for the report and the retry prompt
-# likely secrets; masked before anything is written to state, reports or recipes (the goal in plan.json is user input, left as is)
-SECRET_PATTERNS = [
-    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)"), "[REDACTED]"),
-    (re.compile(r"\bsk-(?:ant-)?[A-Za-z0-9_\-]{12,}"), "[REDACTED]"),
-    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "[REDACTED]"),
-    (re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b"), "[REDACTED]"),
-    (re.compile(r"(?i)(\bbearer\s+)[A-Za-z0-9._~+/\-]{8,}=*"), r"\1[REDACTED]"),
-    (re.compile(r"(?i)((?:api[_-]?key|access[_-]?key|secret[_-]?key|token|secret|password|passwd)[\"']?\s*[:=]\s*[\"']?)[^\s\"',;]{6,}"), r"\1[REDACTED]"),
-]
-
-
 class PlanError(Exception):
     pass
 
@@ -86,14 +77,6 @@ def git(cwd, *a, check=True):
     if check and p.returncode:
         raise PlanError(f"git {' '.join(a[:3])}: {(p.stderr or p.stdout).strip()[:300]}")
     return p
-
-
-def redact(text):
-    """Mask likely secrets (keys, tokens, passwords, private key blocks) in text; the surrounding words stay."""
-    text = "" if text is None else str(text)
-    for rx, repl in SECRET_PATTERNS:
-        text = rx.sub(repl, text)
-    return text
 
 
 def _atomic(path, data):
