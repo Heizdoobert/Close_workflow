@@ -272,13 +272,35 @@ def _hash(plan):
     return hashlib.sha256(json.dumps(plan, sort_keys=True).encode()).hexdigest()[:16]
 
 
+def overlaps(pid, plan):
+    """Other approved or running plans on the same repo that list any of this plan's files. Only a warning: both still run,
+    and the conflict shows up when the branches are merged."""
+    mine = {Path(f).as_posix() for s in plan["steps"] for f in s["files"]}
+    out = []
+    for pf in sorted(plans_dir().glob("*/plan.json")):
+        other = pf.parent.name
+        if other == pid:
+            continue
+        try:
+            op = json.loads(pf.read_text(encoding="utf-8"))
+            ost = json.loads((pf.parent / "state.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue  # a half-written or foreign folder is not a plan we can compare with
+        if op.get("repo") != plan.get("repo") or ost.get("status") not in ("approved", "running"):
+            continue
+        shared = sorted(mine & {Path(f).as_posix() for s in op.get("steps", []) for f in s.get("files", [])})
+        if shared:
+            out.append({"plan": other, "files": shared})
+    return out
+
+
 def approve(pid, wait_for=False):
     """Freeze the (possibly hand-edited) plan by hash and start the runner in the background."""
     d, plan, state = load(pid)
     if state["status"] not in ("awaiting_approval",):
         raise PlanError(f"plan is {state['status']}, not awaiting approval")
     validate(plan)
-    state.update(status="approved", approved=engine.now(), plan_hash=_hash(plan))
+    state.update(status="approved", approved=engine.now(), plan_hash=_hash(plan), overlap=overlaps(pid, plan))
     state["steps"] = {s["id"]: state["steps"].get(s["id"], {"status": "pending"}) for s in plan["steps"]}
     _atomic(d / "state.json", json.dumps(state, indent=2, ensure_ascii=False))
     _mirror(pid, status="approved")
@@ -313,6 +335,68 @@ def reject(pid):
     state["status"] = "rejected"
     _atomic(d / "state.json", json.dumps(state, indent=2))
     _mirror(pid, status="rejected")
+
+
+CLEANABLE = ("done", "failed", "partial", "rejected")
+
+
+def _clean_plan(d, plan_, result_branches):
+    """Remove one finished plan's worktrees and branches. Returns one line per item actually removed."""
+    pid, rp = d.name, plan_.get("repo")
+    if not rp or not Path(rp).is_dir():
+        return []
+    out = []
+
+    def drop(args, what):
+        if git(rp, *args, check=False).returncode == 0:
+            out.append(f"{pid}: {what}")
+
+    wt_dir = d / "wt"
+    names = sorted(p.name for p in wt_dir.iterdir()) if wt_dir.is_dir() else []
+    for name in names:  # step worktrees and the plan worktree (_plan); the branch flow/<pid> survives the worktree
+        drop(["worktree", "remove", "--force", str(wt_dir / name)], f"worktree wt/{name}")
+    step_ids = {s["id"] for s in plan_["steps"]} | (set(names) - {"_plan"})
+    for sid in sorted(step_ids):
+        drop(["branch", "-D", f"flowstep/{pid}/{sid}"], f"branch flowstep/{pid}/{sid}")
+    if result_branches:
+        drop(["branch", "-D", f"flow/{pid}"], f"branch flow/{pid}")
+    try:
+        wt_dir.rmdir()  # only when empty
+    except OSError:
+        pass
+    return out
+
+
+def clean(older_than_days=None, result_branches=False):
+    """Remove finished plans' step worktrees and flowstep/* branches. Candidates: done, failed, partial or rejected plans
+    that no runner holds; with older_than_days, only those finished at least that many days ago. flow/<pid> is kept unless
+    result_branches. plan.json, state.json and report.md stay. Returns one line per removed worktree or branch."""
+    cutoff = time.time() - older_than_days * 86400 if older_than_days is not None else None
+    out, repos = [], set()
+    for sf in sorted(plans_dir().glob("*/state.json")):
+        d = sf.parent
+        try:
+            st = json.loads(sf.read_text(encoding="utf-8"))
+            if st.get("status") not in CLEANABLE:
+                continue  # approved, running and awaiting_approval plans are never touched
+            if cutoff is not None and (not st.get("finished") or _epoch(st["finished"]) > cutoff):
+                continue  # no finish time (e.g. rejected) cannot prove it is old enough
+            plan_ = json.loads((d / "plan.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        lk = engine.try_lock(d / "run.lock")
+        if not lk:
+            continue  # a runner still holds the plan
+        try:
+            out += _clean_plan(d, plan_, result_branches)
+            if plan_.get("repo"):
+                repos.add(plan_["repo"])
+        finally:
+            lk.close()
+    for rp in sorted(repos):
+        if Path(rp).is_dir():
+            git(rp, "worktree", "prune", check=False)
+    return out
 
 
 def status(pid):

@@ -92,6 +92,8 @@ def main(argv=None):
             return 0
         if cmd == "approve" and rest:
             out = plan.approve(rest[0], "--wait" in rest)
+            for o in plan.load(rest[0])[2].get("overlap", []):
+                print(f"warning: plan {rest[0]} shares files with plan {o['plan']}: {', '.join(o['files'])} (merging both may conflict)", file=sys.stderr)
             print(out if out != "started" else f"approved: running in the background. Check: flow-task status {rest[0]}")
             return 0 if out in ("started", "done") else 1
         if cmd == "retry" and rest:
@@ -107,6 +109,16 @@ def main(argv=None):
             return 0 if out in ("done", "already running") else 1
         if cmd == "report" and rest:
             print(plan.report(rest[0]).read_text(encoding="utf-8"))
+            return 0
+        if cmd == "clean":
+            older = None
+            if "--older-than" in rest:
+                try:
+                    older = float(rest[rest.index("--older-than") + 1])
+                except (IndexError, ValueError):
+                    raise plan.PlanError("usage: flow-task clean [--older-than DAYS] [--result-branches]")
+            done = plan.clean(older, "--result-branches" in rest)
+            print("\n".join(done) if done else "nothing to clean")
             return 0
         if cmd == "recover":
             lines = plan.recover()
