@@ -286,7 +286,8 @@ def do_step(ctx, step, rescued=False):
     note = "\nOther steps were merged since you were planned; build on the code that is in this directory now.\n" if rescued else ""
     base_prompt = STEP_PROMPT.format(goal=ctx.plan["goal"], id=sid, title=step["title"], reason=step["reason"], files=", ".join(step["files"]) or "(not specified)",
                                      prompt=step["prompt"], deps=dep_txt + note, acceptance=step["acceptance"] or "none")
-    prompt, passed, summary, error = base_prompt, False, "", ""
+    base_prompt = bridge.recall(f"{step['title']} {step['prompt'][:200]}") + base_prompt
+    prompt, passed, summary, error, first_fail, failed_names = base_prompt, False, "", "", "", ""
     for n in range(1, int(os.environ.get("FLOW_RETRIES", "2")) + 2):
         if ctx.spent >= ctx.budget:
             error = f"plan budget ${ctx.budget} exhausted"
@@ -308,8 +309,17 @@ def do_step(ctx, step, rescued=False):
             passed = True
             break
         fb = f"Gates: {_gate_line(g)}\nAcceptance `{acc['cmd']}` rc={acc.get('rc')}:\n{acc.get('tail', '')[-500:]}"
-        prompt = f"{base_prompt}\n\nYour previous attempt did not pass the automated checks. Fix this:\n{fb}"
+        first_fail = first_fail or fb
+        failed_names = ",".join([k for k, x in g["gates"].items() if not x.get("skipped") and not x["ok"]] + ([] if acc["ok"] else ["acceptance"]))
+        hint = bridge.get_recipe(failed_names)  # reflection: what fixed this kind of failure before
+        prompt = f"{base_prompt}\n\nYour previous attempt did not pass the automated checks. Fix this:\n{fb}" + (f"\n\nWorked before for the same failure:\n{hint}" if hint else "")
+        if hint:
+            ev["recipe_used"] = failed_names
     ev.update(summary=summary[:1200], duration_s=round(time.time() - t0, 1))
+    # a code-level failure happened: keep the lesson (API errors are not lessons); a failure never overwrites a recipe that worked
+    if first_fail and failed_names and (passed or not bridge.get_recipe(failed_names)):
+        bridge.record_recipe(failed_names, f"step '{step['title'][:60]}': {'fixed after' if passed else 'still failing after'} {len(ev['attempts'])} attempts; first failure {first_fail[:300]}")
+        ev["recipe_recorded"] = failed_names
     if not passed:
         ev["uncommitted"] = git(str(wt), "status", "--porcelain", check=False).stdout.strip().splitlines()[:20]
         ev.update(status="failed", error=error or "gates/acceptance still failing after retries", worktree=str(wt))
@@ -495,6 +505,10 @@ def report(pid):
                 L.append(f"- API {e['backend']} lần {e['attempt']}: {e['error'][:120]} → {e['action']}")
         for r in ev.get("rescues", []):
             L.append(f"- cứu: {r}")
+        if ev.get("recipe_used"):
+            L.append(f"- reflection: dùng recipe cũ `flow-gate:{ev['recipe_used']}` ở lần thử lại")
+        if ev.get("recipe_recorded"):
+            L.append(f"- reflection: đã ghi recipe `flow-gate:{ev['recipe_recorded']}`")
         if ev.get("error"):
             L.append(f"- lỗi: {ev['error']}")
     integ = st.get("integration")

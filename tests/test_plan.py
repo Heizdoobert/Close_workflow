@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from flow_engine import engine, plan
+from flow_engine import bridge, engine, plan
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="fake binaries are POSIX scripts")
 HERE = Path(__file__).parent
@@ -197,3 +197,47 @@ def test_nothing_merged_means_no_fake_integration_ok(env, monkeypatch):
     assert plan.approve(pid, wait_for=True) == "failed"
     assert json.loads((env.home / "plans" / pid / "state.json").read_text())["integration"] is None
     assert "Kiểm tra tích hợp" not in (env.home / "plans" / pid / "report.md").read_text()
+
+
+def test_failed_attempt_records_recipe_and_next_run_reuses_it(env, monkeypatch):
+    store, calls = {}, []
+
+    def fake_agent(*args, cwd=None, timeout=60):
+        calls.append(args)
+        out = ""
+        if args[:2] == ("memory", "recipe-record"):
+            store[args[3]] = args[5]
+        elif args[:2] == ("memory", "recipe-get"):
+            out = json.dumps({"recipe": store[args[3]]}) if args[3] in store else "No recipe found for x."
+        return subprocess.CompletedProcess(args, 0, out, "")
+    monkeypatch.setattr(bridge, "run_agent", fake_agent)
+    env.script([step("s1", files=["a.py"], acc="grep -q GOOD a.py")], {"s1": {"files": {"a.py": "BAD\n"}, "fixed_files": {"a.py": "GOOD\n"}}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) == "done"
+    st = json.loads((env.home / "plans" / pid / "state.json").read_text())["steps"]["s1"]
+    assert st["recipe_recorded"] == "acceptance" and "fixed after 2 attempts" in store["flow-gate:acceptance"]
+    assert "recipe_used" not in st  # nothing known the first time
+    pid2 = plan.create("g")
+    assert plan.approve(pid2, wait_for=True) == "done"
+    st2 = json.loads((env.home / "plans" / pid2 / "state.json").read_text())["steps"]["s1"]
+    assert st2["recipe_used"] == "acceptance"
+    assert "dùng recipe cũ" in (env.home / "plans" / pid2 / "report.md").read_text()
+
+
+def test_failure_does_not_overwrite_a_recipe_that_worked(env, monkeypatch):
+    store = {"flow-gate:acceptance": "worked: use GOOD"}
+
+    def fake_agent(*args, cwd=None, timeout=60):
+        out = ""
+        if args[:2] == ("memory", "recipe-record"):
+            store[args[3]] = args[5]
+        elif args[:2] == ("memory", "recipe-get") and args[3] in store:
+            out = json.dumps({"recipe": store[args[3]]})
+        return subprocess.CompletedProcess(args, 0, out, "")
+    monkeypatch.setattr(bridge, "run_agent", fake_agent)
+    env.script([step("s1", files=["a.py"], acc="grep -q GOOD a.py")], {"s1": {"files": {"a.py": "BAD\n"}}})  # never fixed
+    pid = plan.create("g")
+    plan.approve(pid, wait_for=True)
+    st = json.loads((env.home / "plans" / pid / "state.json").read_text())["steps"]["s1"]
+    assert st["status"] == "failed" and st["recipe_used"] == "acceptance" and "recipe_recorded" not in st
+    assert store["flow-gate:acceptance"] == "worked: use GOOD"

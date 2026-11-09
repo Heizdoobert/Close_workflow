@@ -29,4 +29,5 @@
 ## Agentic plan flow + model policy (Phase 8)
 - `flow-task plan "<goal>" [--model ID]` -> review -> `approve` -> parallel sub-agents in git worktrees (`flowstep/<plan>/<step>`), merged into `flow/<plan>` after gates + acceptance; `plans/<plan>/report.md` = Việc làm / File / Lý do / Bằng chứng. MCP: `flow_plan_create|approve|status`. Code: `flow_engine/plan.py`, `flow_engine/agents.py`.
 - Backends: claude, agy, opencode. 503/429/timeouts: backoff retry, then next backend. Parent `gpt-oss-120b-medium` => pinned (`agy:<id>!`): persistent retries, same conversation, never another model. Parent `gemini-3.8-flash-*` => GPT-OSS 120B first, then lighter. `FLOW_BACKENDS` overrides. Pass the parent's own model id; flow-task cannot detect it.
+- Reflection: a step that fails gates/acceptance is retried with the failure output plus any stored recipe (`flow-gate:<names>`); the lesson is recorded (`fixed after` always, `still failing` only if no recipe exists). Shown in report.md as `reflection:`.
 - Known: OpenCode key expired (401) as of 2026-11-09; agy sandbox only mounts /mnt/second_drive and /tmp.

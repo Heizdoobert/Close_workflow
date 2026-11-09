@@ -50,3 +50,12 @@ def learn(task_id, message, result):
 
 def record_recipe(names, text):
     run_agent("memory", "recipe-record", "--key", f"flow-gate:{names}", "--recipe", text, timeout=60)
+
+
+def get_recipe(names):
+    """Stored fix for an earlier failure with the same gate names ('' when none)."""
+    p = run_agent("memory", "recipe-get", "--key", f"flow-gate:{names}", timeout=30)
+    try:
+        return json.loads(p.stdout)["recipe"][:500] if p.returncode == 0 else ""
+    except (ValueError, KeyError, TypeError):  # "No recipe found ..." is plain text
+        return ""
