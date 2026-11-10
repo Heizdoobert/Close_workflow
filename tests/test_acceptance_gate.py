@@ -79,3 +79,17 @@ def test_run_gates_reports_the_constraints_gate(repo, monkeypatch):
     res = gate.run_gates(str(repo))
     assert not res["ok"] and not res["gates"]["constraints"]["ok"]
     assert res["gates"]["constraints"]["assert_net"] == -1
+
+
+def test_constraints_allows_moving_a_test_file_without_staging(repo):
+    (repo / "legacy").mkdir()
+    shutil.move(str(repo / "tests" / "test_x.py"), str(repo / "legacy" / "test_x.py"))  # plain mv: deletion unstaged, new file untracked
+    res = gate.constraints(repo)
+    assert res["ok"] and res["deleted_tests"] == [] and res["assert_net"] == 0
+
+
+def test_constraints_sees_a_skip_marker_in_a_new_untracked_file(repo):
+    skip = "@pytest.mark." + "skip"
+    (repo / "tests" / "test_new.py").write_text("import pytest\n\n" + skip + "\n" + TWO_ASSERTS)
+    res = gate.constraints(repo)
+    assert not res["ok"] and res["weakened"] == 1 and res["files"] == ["tests/test_new.py"]
