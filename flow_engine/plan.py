@@ -115,7 +115,7 @@ def extract_json(text):
     if i < 0 or j <= i:
         raise PlanError("reply contains no JSON object")
     try:
-        return json.loads(t[i:j + 1])
+        return json.loads(t[i:j + 1], strict=False)  # strict=False: models put raw newlines/tabs inside strings
     except ValueError as e:
         raise PlanError(f"invalid JSON: {e}")
 
@@ -254,8 +254,9 @@ def create(goal, parent_model=None, brief=None):
     d.mkdir(parents=True)
     chain = agents.chain_from_env("claude:haiku", parent_model)
     ctx = (interview.text(brief) if brief else "") + bridge.recall(goal)
-    prompt, trace, cost, plan = PLAN_PROMPT.format(max=os.environ.get("FLOW_MAX_STEPS", "8"), shape=method.SHAPE, rules=method.RULES, ctx=ctx, goal=goal), [], 0.0, None
-    for _ in range(2):  # one repair round when the reply is not a valid plan
+    base, trace, cost, plan, why = PLAN_PROMPT.format(max=os.environ.get("FLOW_MAX_STEPS", "8"), shape=method.SHAPE, rules=method.RULES, ctx=ctx, goal=goal), [], 0.0, None, ""
+    for _ in range(max(1, int(os.environ.get("FLOW_PLAN_ROUNDS", "4")))):  # repair rounds when the reply is not a valid plan (weaker models need more than one)
+        prompt = base + (f"\n\nYour previous reply was rejected ({why}). Reply with ONLY the corrected JSON object." if why else "")
         res, c, _t = agents.call(chain, prompt, agents.Opts(wd, agents.READ_TOOLS, float(os.environ.get("FLOW_PLAN_USD", "0.30")), 300), trace)
         cost += c
         if not res.ok:
@@ -268,9 +269,9 @@ def create(goal, parent_model=None, brief=None):
             plan = cand
             break
         except PlanError as e:
-            prompt += f"\n\nYour previous reply was rejected ({e}). Reply with ONLY the corrected JSON object."
+            why = str(e)
     if plan is None:
-        raise PlanError("planner did not produce a valid plan")
+        raise PlanError(f"planner did not produce a valid plan: {why}")
     plan = {"goal": goal, "repo": wd, "base": git(wd, "rev-parse", "HEAD").stdout.strip(), **({"brief": brief} if brief else {}), "analysis": method.clean(plan["analysis"]), "steps": plan["steps"]}  # repo is fixed here: approving from another cwd must not retarget it
     if dirty:
         plan["dirty_files"] = dirty[:20]

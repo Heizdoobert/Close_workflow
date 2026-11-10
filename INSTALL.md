@@ -77,7 +77,7 @@ Pass your model id when drafting (`--model`, or the MCP `model` argument, or env
 | `gemini-3.8-flash-*` | GPT-OSS 120B first (persistent retries), and only if it truly cannot be called: the parent's own Flash model, then `gemini-3.8-flash-low` |
 | anything else / none | `FLOW_BACKENDS` (default `claude:haiku`) |
 
-`FLOW_BACKENDS="claude:haiku,claude:sonnet,agy:gpt-oss-120b-medium,opencode"` overrides everything. Spec suffix `!` pins, `+` prefers. `--model` is always passed to agy explicitly. Tuning: `FLOW_API_RETRIES` (3), `FLOW_BACKOFF_BASE/CAP`, `FLOW_PIN_RETRIES`, `FLOW_PIN_BACKOFF_CAP`. Budgets: `FLOW_STEP_USD` (0.40), `FLOW_PLAN_MAX_USD` (3.0), `FLOW_PLAN_USD` (0.30), `FLOW_PARALLEL` (3), `FLOW_MAX_STEPS` (8).
+`FLOW_BACKENDS="claude:haiku,claude:sonnet,agy:gpt-oss-120b-medium,opencode"` overrides everything. Spec suffix `!` pins, `+` prefers. `--model` is always passed to agy explicitly. Tuning: `FLOW_API_RETRIES` (3), `FLOW_BACKOFF_BASE/CAP`, `FLOW_PIN_RETRIES`, `FLOW_PIN_BACKOFF_CAP`. Budgets: `FLOW_STEP_USD` (0.40), `FLOW_PLAN_MAX_USD` (3.0), `FLOW_PLAN_USD` (0.30), `FLOW_PLAN_ROUNDS` (4: planner replies that are not a valid plan are re-asked, each time with the last rejection), `FLOW_PARALLEL` (3), `FLOW_MAX_STEPS` (8).
 
 Antigravity runs inside your `agent-sandbox` Docker, which only mounts `/mnt/second_drive` and `/tmp`: keep the repo under one of them. OpenCode: `FLOW_BACKENDS=...,opencode[:provider/model]` works only with a valid OpenCode key.
 

@@ -56,6 +56,37 @@ def test_create_asks_again_then_stores_the_analysis(env, monkeypatch):
     assert "root cause" in shown and "do s1" in shown  # the analysis does not push the steps out of the review text
 
 
+def _planner_replies(env, monkeypatch, replies):
+    """The planner agent answers `replies` one call at a time (last one repeats); returns the prompts it was given."""
+    prompts = []
+
+    def fake(chain, prompt, o, trace=None):
+        prompts.append(prompt)
+        return plan.agents.Result(True, replies[min(len(prompts) - 1, len(replies) - 1)]), 0.0, {}
+    monkeypatch.setattr(plan.agents, "call", fake)
+    return prompts
+
+
+def test_planner_gets_several_repair_rounds_and_a_raw_newline_in_a_string_is_fine(env, monkeypatch):
+    good = json.dumps({"analysis": GOOD, "steps": [step("s1", files=["a.py"], acc="python3 -c 'import a'")]})
+    lenient = good.replace("do s1", "do\ns1")  # a raw newline inside a JSON string: strict json.loads rejects it
+    assert lenient != good
+    nostep = json.dumps({"analysis": GOOD, "steps": [{k: v for k, v in step("s1", files=["a.py"], acc="true").items() if k != "prompt"}]})
+    prompts = _planner_replies(env, monkeypatch, ["not json", nostep, "{broken", lenient])
+    pid = plan.create("g")
+    assert len(prompts) == 4 and "was rejected" in prompts[1] and "missing prompt" in prompts[2]
+    assert prompts[3].count("was rejected") == 1  # only the last rejection is repeated, the prompt does not grow
+    assert json.loads(_read(env, pid, "plan.json"))["steps"][0]["id"] == "s1"
+
+
+def test_planner_gives_up_after_the_round_limit_and_says_why(env, monkeypatch):
+    monkeypatch.setenv("FLOW_PLAN_ROUNDS", "2")
+    prompts = _planner_replies(env, monkeypatch, ["still not json"])
+    with pytest.raises(plan.PlanError, match="did not produce a valid plan: .*no JSON"):
+        plan.create("g")
+    assert len(prompts) == 2
+
+
 def test_step_agents_are_given_the_analysis_and_the_no_rename_rule(env, monkeypatch):
     seen = []
     real = plan.agents.call
