@@ -56,13 +56,22 @@ def _per_file(diff):
     return stats
 
 
+def _snapshot_diff(root, *flags):
+    """Diff of the whole working tree against HEAD through a throwaway index: untracked files count as added and a plain move is a rename, not a delete."""
+    with tempfile.TemporaryDirectory() as d:
+        env = {**os.environ, "GIT_INDEX_FILE": os.path.join(d, "index")}
+        _run(root, ["git", "read-tree", "HEAD"], env=env)
+        _run(root, ["git", "add", "-A"], env=env)
+        return _run(root, ["git", "diff", "--cached", "-M", *flags, "HEAD"], env=env).stdout
+
+
 def constraints(root="."):
-    """Diff-level bar: no new suppressions, no removed tests, no deleted test files, no net loss of asserts in tests."""
+    """Diff-level bar: no new suppressions, no removed tests, no deleted test files, no net loss of asserts in tests. A moved test file is not a deleted one."""
     root = os.path.abspath(root)
-    diff = _run(root, ["git", "diff", "HEAD", "-U0"]).stdout
+    diff = _snapshot_diff(root, "-U0")
     hits = WEAK.findall(diff)
     dropped = [l for l in diff.splitlines() if not l.startswith("---") and DROPPED.match(l)]
-    deleted = [l.split("\t", 1)[1] for l in _run(root, ["git", "diff", "--name-status", "HEAD", "--diff-filter=D"]).stdout.splitlines()
+    deleted = [l.split("\t", 1)[1] for l in _snapshot_diff(root, "--name-status", "--diff-filter=D").splitlines()
                if "\t" in l and is_test_file(l.split("\t", 1)[1])]
     stats = _per_file(diff)
     net = sum(s["asserts"] for f, s in stats.items() if is_test_file(f))
