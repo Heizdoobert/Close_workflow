@@ -531,7 +531,7 @@ def test_dirty_repo_plan_warns_and_runs_from_the_commit(env):
     assert json.loads((env.home / "plans" / pid / "plan.json").read_text(encoding="utf-8"))["dirty_files"] == ["?? scratch.txt"]
     md = (env.home / "plans" / pid / "plan.md").read_text(encoding="utf-8")
     assert "WARNING" in md and "?? scratch.txt" in md
-    assert plan.approve(pid, wait_for=True) == "done"
+    assert plan.approve(pid, wait_for=True, allow_dirty=True) == "done"  # approve refuses dirty repos by default (tests/test_dirty_gap.py)
     assert sh(env.repo, "git", "ls-tree", "--name-only", f"flow/{pid}").split() == ["README.md", "a.py"]  # scratch.txt is not merged
 
 

@@ -17,7 +17,7 @@ USAGE = ('usage: flow-task "<task message>"      store a task (with FLOW_EXEC=1 
          '       flow-task interview "<goal>" [--model ID]   ask what you really want (one question at a time), then draft the plan from the confirmed brief\n'
          '       flow-task interview-step "<goal>" [--qa FILE] [--model ID]   one interview round as JSON, for agents without a terminal\n'
          "       flow-task where [<plan>]   where a plan stands and the next action (default: newest plan of this repo)\n"
-         "       flow-task show <plan> | approve <plan> [--wait] | retry <plan> | reject <plan> | report <plan> | run <plan> | plans\n"
+         "       flow-task show <plan> | approve <plan> [--wait] [--allow-dirty] | retry <plan> | reject <plan> | report <plan> | run <plan> | plans\n"
          "       flow-task recover   resume plans whose runner died (no listener needed) and kill their orphan agent groups\n"
          "       flow-task clean [--older-than DAYS] [--result-branches]   remove finished plans' worktrees and flowstep/* branches (never a running plan)\n"
          "       flow-task doctor also reports the sandbox (bwrap) and gitleaks lines: a missing one is a warning, not a failure")
@@ -122,7 +122,7 @@ def main(argv=None):
             print(plan.show(rest[0]))
             return 0
         if cmd == "approve" and rest:
-            out = plan.approve(rest[0], "--wait" in rest)
+            out = plan.approve(rest[0], "--wait" in rest, allow_dirty="--allow-dirty" in rest)
             for o in plan.load(rest[0])[2].get("overlap", []):
                 print(f"warning: plan {rest[0]} shares files with plan {o['plan']}: {', '.join(o['files'])} (merging both may conflict)", file=sys.stderr)
             print(out if out != "started" else f"approved: running in the background. Check: flow-task status {rest[0]}")
