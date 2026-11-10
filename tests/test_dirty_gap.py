@@ -1,11 +1,14 @@
 """P1 #4: approve refuses a repo with uncommitted files unless --allow-dirty, and an accepted dirty list is part of the approval.
 Uses the fake agents from test_plan."""
 import json
+import sys
 
 import pytest
 
 from flow_engine import cli, plan
 from test_plan import env, step, sh  # noqa: F401  (env is the shared fake-agent fixture)
+
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="fake binaries and `test -f` are POSIX")
 
 
 def _state(e, pid):
