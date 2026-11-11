@@ -38,8 +38,8 @@ class PlanError(Exception):
 
 
 PLAN_PROMPT = """You are the planning agent of an automated engineering system. Explore the repository read-only, then reply with ONLY one JSON object, no prose, no code fences:
-{{{shape},"steps":[{{"id":"s1","title":"short imperative","reason":"why this step is needed for the goal","deps":[],"files":["relative/paths/this/step/creates/or/edits"],"acceptance":"ONE shell command that exits 0 only if this step is really done (e.g. python3 -m pytest -q tests/test_x.py; always `python3 -m pytest`, never a bare `pytest`), run from the repo root","prompt":"self-contained instructions for the engineer doing this step"}}]}}
-Rules: at most {max} steps. Steps that do not depend on each other run in parallel in separate git worktrees, so give them disjoint files. "deps" lists step ids that must finish first. The acceptance command must verify behaviour, not just that a file exists. Stay inside the repo.
+{{{shape},"steps":[{{"id":"s1","title":"short imperative","reason":"why this step is needed for the goal","deps":[],"files":["relative/paths/this/step/creates/or/edits"],"kind":"code or general","acceptance":"ONE shell command that exits 0 only if this step is really done (e.g. python3 -m pytest -q tests/test_x.py; always `python3 -m pytest`, never a bare `pytest`), run from the repo root","prompt":"self-contained instructions for the engineer doing this step"}}]}}
+Rules: at most {max} steps. Steps that do not depend on each other run in parallel in separate git worktrees, so give them disjoint files. "deps" lists step ids that must finish first. The acceptance command must verify behaviour, not just that a file exists. Stay inside the repo. "kind" is "code" when the step writes or edits source code or tests (including quick mechanical edits), "general" for anything else (docs, prose, config notes, research).
 {rules}
 {ctx}Goal: {goal}"""
 
@@ -188,6 +188,7 @@ def validate(plan, max_steps=None):
             why = unsafe_path_reason(f)
             if why:
                 raise PlanError(f"step {sid}: unsafe path {f!r} ({why})")
+        s["kind"] = "general" if s.get("kind") == "general" else "code"  # picks the model: code steps -> GPT-OSS first, the rest -> Gemini
         s["acceptance"] = str(s.get("acceptance") or "").strip()
         why = trivial_acceptance_reason(s["acceptance"])
         if why:
@@ -215,7 +216,7 @@ def render_md(pid, plan, state):
         out += [f"  {line}" for line in state["dirty_files"]] + [""]
     for s in plan["steps"]:
         out += [f"## [{s['id']}] {s['title']}", f"- why: {s['reason']}", f"- deps: {', '.join(s['deps']) or '-'}",
-                f"- files: {', '.join(s['files']) or '-'}", f"- acceptance: `{s['acceptance'] or 'none'}`", ""]
+                f"- files: {', '.join(s['files']) or '-'}", f"- kind: {s.get('kind', 'code')}", f"- acceptance: `{s['acceptance'] or 'none'}`", ""]
     out.append(f"Approve: flow-task approve {pid}   (edit plans/{pid}/plan.json first if you want changes)")
     return "\n".join(out)
 
@@ -252,7 +253,7 @@ def create(goal, parent_model=None, brief=None):
     pid = time.strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2)
     d = plans_dir() / pid
     d.mkdir(parents=True)
-    chain = agents.chain_from_env("claude:haiku", parent_model)
+    chain = agents.chain_from_env("claude:haiku", parent_model, "general")
     ctx = (interview.text(brief) if brief else "") + bridge.recall(goal)
     base, trace, cost, plan, why = PLAN_PROMPT.format(max=os.environ.get("FLOW_MAX_STEPS", "8"), shape=method.SHAPE, rules=method.RULES, ctx=ctx, goal=goal), [], 0.0, None, ""
     for _ in range(max(1, int(os.environ.get("FLOW_PLAN_ROUNDS", "4")))):  # repair rounds when the reply is not a valid plan (weaker models need more than one)
@@ -449,7 +450,8 @@ class Ctx:
         self.repo, self.branch = plan.get("repo") or repo(), f"flow/{pid}"
         self.plan_wt = d / "wt" / "_plan"
         self.slock, self.glock, self.mlock = threading.Lock(), threading.Lock(), threading.Lock()
-        self.chain = agents.chain_from_env("claude:haiku", state.get("parent_model"))
+        self.chain = agents.chain_from_env("claude:haiku", state.get("parent_model"), "general")  # planner-side work: non-code steps, review, SHIP
+        self.code_chain = agents.chain_from_env("claude:haiku", state.get("parent_model"), "code")
         self.budget = float(os.environ.get("FLOW_PLAN_MAX_USD", "3.0"))
         self.step_usd = float(os.environ.get("FLOW_STEP_USD", "0.40"))  # per-step estimate: what a launch reserves from the budget
         self.reserved = {}  # sid -> USD still reserved for that running step (spent is taken off it as the step pays)
@@ -628,7 +630,7 @@ def do_step(ctx, step, rescued=False):
             break
         started = []  # agent process groups this call starts: dropped from state once the call returns
         o = agents.Opts(str(wt), agents.WRITE_TOOLS, cap, int(os.environ.get("FLOW_TIMEOUT", "600")), on_group=lambda g: _track_group(ctx, ev, g, started))
-        res, cost, tok = agents.call(ctx.chain, prompt, o, ev["api"])
+        res, cost, tok = agents.call(ctx.chain if step.get("kind") == "general" else ctx.code_chain, prompt, o, ev["api"])
         with ctx.slock:
             ev["agent_pgids"] = [g for g in ev.get("agent_pgids", []) if g not in started]
         ctx.add_cost(cost, tok, sid)

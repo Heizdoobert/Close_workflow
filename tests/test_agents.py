@@ -80,6 +80,8 @@ def test_policy_chains():
     assert agents.policy_chain(OSS) == [f"agy:{OSS}!"]
     assert agents.policy_chain("GPT-OSS 120B (Medium)") == ["agy:GPT-OSS 120B (Medium)!"]
     assert agents.policy_chain("gemini-3.8-flash-high") == [f"agy:{OSS}+", "agy:gemini-3.8-flash-high", "agy:gemini-3.8-flash-low"]
+    assert agents.policy_chain("gemini-3.8-flash-high", "general") == ["agy:gemini-3.8-flash-high", "agy:gemini-3.8-flash-low"]  # planner, review, SHIP stay on Gemini
+    assert agents.policy_chain(OSS, "general") == [f"agy:{OSS}!"]  # a GPT-OSS parent is pinned for every role
     assert agents.policy_chain("claude-sonnet-4-6") == [] and agents.policy_chain(None) == []
 
 

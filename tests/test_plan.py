@@ -156,6 +156,17 @@ def test_gpt_oss_parent_runs_the_whole_plan_on_that_model_only(env, monkeypatch)
     assert OSS in rep and "same conversation" in rep
 
 
+def test_gemini_parent_runs_code_steps_on_gpt_oss_and_planning_and_other_steps_on_gemini(env):
+    gem = "gemini-3.8-flash-high"
+    env.script([step("s1", files=["a.py"], acc="test -f a.py"), {**step("s2", deps=["s1"], files=["notes.md"], acc="test -f notes.md"), "kind": "general"}],
+               {"s1": {"files": {"a.py": "1\n"}}, "s2": {"files": {"notes.md": "n\n"}}})
+    pid = plan.create("g", parent_model=gem)
+    assert plan.approve(pid, wait_for=True) == "done"
+    assert [c[1] for c in env.calls() if c[0] == "agy"][:3] == [gem, OSS, gem]  # planner, code step, general step; review and SHIP come after, on Gemini
+    assert OSS not in [c[1] for c in env.calls() if c[0] == "agy"][3:]
+    assert [s["kind"] for s in json.loads((env.home / "plans" / pid / "plan.json").read_text())["steps"]] == ["code", "general"]  # a missing or unknown kind means code
+
+
 def test_gpt_oss_dead_key_fails_the_plan_but_never_switches_model(env, monkeypatch):
     monkeypatch.setenv("FAKE_AGY_DEAD", OSS)
     env.script([step("s1")], {"s1": {}})
