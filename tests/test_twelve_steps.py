@@ -188,6 +188,8 @@ def test_an_unusable_review_reply_does_not_change_the_plan_result(env, monkeypat
     pid = _run_plan(env, monkeypatch, "not json at all")
     st = json.loads(_read(env, pid, "state.json"))
     assert st["status"] == "done" and st["review"]["status"] == "not_run"
+    assert "reply tail: 'not json at all'" in st["review"]["error"]  # the failure can be read afterwards
+    assert len([c for c in env.calls() if c[0] == "review"]) == 2  # one retry for an unparsable reply
     rows = [l for l in _read(env, pid, "report.md").splitlines() if l.startswith("| 12 ") or l.startswith("| 13 ")]  # review and simplify
     assert len(rows) == 2 and all("THIẾU" in r for r in rows)  # the report says the step did not run
 

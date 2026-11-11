@@ -58,10 +58,13 @@ def work(prompt):
         return json.dumps(replies[min(next_count("interview_count"), len(replies) - 1)])
     m = re.search(r"You are the ([\w-]+) persona", prompt)
     if m:
-        log("persona", m.group(1))
+        log("persona", m.group(1), "scouted" if "gathered by a scout" in prompt else "-")
         return os.environ.get("FAKE_SHIP_" + m.group(1).upper().replace("-", "_"), '{"findings":[],"rollback_triggers":["error rate up"]}')
+    if "You are the scout" in prompt:
+        log("scout")
+        return os.environ.get("FAKE_SCOUT", '{"facts":[]}')
     if "review and simplification agent" in prompt:
-        log("review")
+        log("review", "scouted" if "gathered by a scout" in prompt else "-")
         return os.environ.get("FAKE_REVIEW", '{"review":[],"simplify":[],"edge_cases":["empty input"]}')
     m = re.search(r"Your step \[([\w-]+)\]", prompt)
     sid = m.group(1)

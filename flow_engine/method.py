@@ -14,6 +14,7 @@ root cause or the spec is true. The coverage table says which is which.
 """
 
 import re
+from pathlib import Path
 
 TEXT_MIN = 20
 SHAPE = ('"analysis":{"research":[{"file":"path that exists in the repo","finding":"what you learned there"}],"root_cause":"why the problem or need exists",'
@@ -101,9 +102,45 @@ def cap_diff(diff, limit):
     return "\n".join(out) + f"\n... (diff cut at {limit} bytes: read the rest with Read/Grep)"
 
 
-def review_prompt(goal, spec, changed, diff):
+def scout_prompt(goal, spec, changed):
+    return ("You are the scout of an automated engineering system. Read-only: do not edit anything. The merged result of a plan is in your current directory.\n"
+            "Reviewers who decide whether to ship will rely on what you gather, so they do not have to read the repository again. Gather facts, do not judge.\n"
+            f"Goal: {goal}\nSpec: {_cut(spec, 600)}\nChanged files: {', '.join(changed)}\n\n"
+            "Read every changed file and its tests. Collect up to 40 facts: for each public function or branch that changed, where it is called from, which test "
+            "exercises it (or that none does), how error paths and edge cases of the spec are handled, anything touching input validation, files, processes or secrets.\n"
+            'Reply with ONLY one JSON object: {"facts":[{"file":"path","line":0,"quote":"one line copied exactly from that file","note":"what this line shows"}]}\n'
+            "A fact whose quote is not found verbatim in the file is thrown away. To say something is missing, quote the line where it would be expected.")
+
+
+def parse_scout(obj, wt):
+    """Keep a fact only when its quote is really a line of the file it names (inside the worktree); the line number is corrected to where the quote is."""
+    root, facts, raw, cache = Path(wt).resolve(), [], [i for i in (obj.get("facts") if isinstance(obj.get("facts"), list) else []) if isinstance(i, dict)], {}
+    for i in raw:
+        f, quote = _s(i.get("file"), 300), _s(i.get("quote"), 200)
+        path = (root / f).resolve()
+        if not f or len(quote) < 3 or not path.is_relative_to(root) or not path.is_file():
+            continue
+        if f not in cache:
+            cache[f] = path.read_text(errors="ignore").splitlines()
+        hits = [n for n, l in enumerate(cache[f], 1) if quote in l]
+        if hits:
+            want = int(i["line"]) if str(i.get("line", "")).isdigit() else 0
+            facts.append({"file": f, "line": min(hits, key=lambda n: abs(n - want)), "quote": quote, "note": _s(i.get("note"), 200)})
+    return {"status": "ok", "facts": facts[:40], "dropped": len(raw) - len(facts)}
+
+
+def scout_text(facts, limit=6000):
+    """The block review and the SHIP personas get. Empty when there is no scout."""
+    if not facts:
+        return ""
+    return ("Facts gathered by a scout that read the merged result (each quote was checked against the file by the harness; the notes are the scout's own reading, not checked). "
+            "Decide from the diff and these facts. Open a file only when a fact you need is missing or you doubt a note.\n"
+            + _cut("\n".join(f"- {x['file']}:{x['line']} `{x['quote']}`: {x['note']}" for x in facts), limit) + "\n\n")
+
+
+def review_prompt(goal, spec, changed, diff, facts=""):
     return ("You are the review and simplification agent of an automated engineering system. Read-only: do not edit anything. The merged result of a plan is in your current directory.\n"
-            f"Goal: {goal}\nSpec: {_cut(spec, 600)}\nChanged files: {', '.join(changed)}\nDiff:\n{diff}\n\n"
+            f"Goal: {goal}\nSpec: {_cut(spec, 600)}\nChanged files: {', '.join(changed)}\nDiff:\n{diff}\n\n{facts}"
             'Reply with ONLY one JSON object: {"review":[{"file":"","line":0,"severity":"high|medium|low","problem":"","fix":""}],"simplify":[{"file":"","what":""}],'
             '"edge_cases":["edge cases you checked"]}\n'
             "review = wrong logic, unhandled edge cases, callers or behaviour broken, lost behaviour. simplify = dead or duplicated code, needless abstraction, things to delete. "
@@ -198,9 +235,9 @@ def is_small(changed, lines, diff):
         "\n".join(l for l in diff.splitlines() if l.startswith("+") and not l.startswith("+++")))
 
 
-def persona_prompt(name, goal, spec, changed, diff):
+def persona_prompt(name, goal, spec, changed, diff, facts=""):
     return (f"You are the {name} persona of an automated engineering system's ship check. Read-only: do not edit anything, do not call other agents. The merged result is in your current directory.\n"
-            f"{PERSONAS[name]}\nGoal: {goal}\nSpec: {_cut(spec, 600)}\nChanged files: {', '.join(changed)}\nDiff:\n{diff}\n\n"
+            f"{PERSONAS[name]}\nGoal: {goal}\nSpec: {_cut(spec, 600)}\nChanged files: {', '.join(changed)}\nDiff:\n{diff}\n\n{facts}"
             'Reply with ONLY one JSON object: {"findings":[{"file":"","line":0,"severity":"","problem":"","fix":""}]'
             + (',"rollback_triggers":["observable signals that should make the team roll this change back"]' if name == "code-reviewer" else "")
             + '}. Report only what you can point to in the diff or in files it touches; an empty list when clean.')

@@ -255,11 +255,12 @@ def create(goal, parent_model=None, brief=None):
     d.mkdir(parents=True)
     chain = agents.chain_from_env("claude:haiku", parent_model, "general")
     ctx = (interview.text(brief) if brief else "") + bridge.recall(goal)
-    base, trace, cost, plan, why = PLAN_PROMPT.format(max=os.environ.get("FLOW_MAX_STEPS", "8"), shape=method.SHAPE, rules=method.RULES, ctx=ctx, goal=goal), [], 0.0, None, ""
+    base, trace, cost, plan, why, calls = PLAN_PROMPT.format(max=os.environ.get("FLOW_MAX_STEPS", "8"), shape=method.SHAPE, rules=method.RULES, ctx=ctx, goal=goal), [], 0.0, None, "", []
     for _ in range(max(1, int(os.environ.get("FLOW_PLAN_ROUNDS", "4")))):  # repair rounds when the reply is not a valid plan (weaker models need more than one)
         prompt = base + (f"\n\nYour previous reply was rejected ({why}). Reply with ONLY the corrected JSON object." if why else "")
-        res, c, _t = agents.call(chain, prompt, agents.Opts(wd, agents.READ_TOOLS, float(os.environ.get("FLOW_PLAN_USD", "0.30")), 300), trace)
+        res, c, tok = agents.call(chain, prompt, agents.Opts(wd, agents.READ_TOOLS, float(os.environ.get("FLOW_PLAN_USD", "0.30")), 300), trace)
         cost += c
+        calls.append({"role": "planner", "backend": res.backend, **tok})
         if not res.ok:
             raise PlanError(f"planner failed: {res.error}")
         try:
@@ -277,7 +278,7 @@ def create(goal, parent_model=None, brief=None):
     if dirty:
         plan["dirty_files"] = dirty[:20]
     state = {"id": pid, "status": "awaiting_approval", "goal": goal, "created": engine.now(), "parent_model": parent_model or os.environ.get("FLOW_PARENT_MODEL", ""),
-             "plan_cost_usd": round(cost + (brief or {}).get("cost_usd", 0), 6), "plan_trace": trace, "steps": {s["id"]: {"status": "pending"} for s in plan["steps"]}}
+             "plan_cost_usd": round(cost + (brief or {}).get("cost_usd", 0), 6), "plan_trace": trace, "calls": calls, "steps": {s["id"]: {"status": "pending"} for s in plan["steps"]}}
     if dirty:
         state["dirty_files"] = dirty[:20]
     for e in trace:  # an agent error can echo an API key
@@ -465,8 +466,11 @@ class Ctx:
             except RuntimeError:
                 time.sleep(0.05)
 
-    def add_cost(self, cost, tokens, sid=None):
+    def add_cost(self, cost, tokens, sid=None, role="", backend=""):
+        """role + backend put the call in state["calls"]: who spent which tokens on which model."""
         with self.slock:
+            if role:
+                self.state.setdefault("calls", []).append({"role": role, "backend": backend, **tokens})
             self.state["cost_usd"] = self.state.get("cost_usd", 0) + cost
             if sid in self.reserved:
                 self.reserved[sid] = max(0.0, self.reserved[sid] - cost)
@@ -633,7 +637,7 @@ def do_step(ctx, step, rescued=False):
         res, cost, tok = agents.call(ctx.chain if step.get("kind") == "general" else ctx.code_chain, prompt, o, ev["api"])
         with ctx.slock:
             ev["agent_pgids"] = [g for g in ev.get("agent_pgids", []) if g not in started]
-        ctx.add_cost(cost, tok, sid)
+        ctx.add_cost(cost, tok, sid, f"step:{sid}", res.backend)
         ev["backend"] = res.backend or ev.get("backend", "")
         if not res.ok:
             error = redact(res.error)
@@ -812,7 +816,7 @@ def run(pid):
         sts = [v["status"] for v in state["steps"].values()]
         state["integration"] = integrate(ctx) if "done" in sts else None  # nothing merged = nothing to integrate
         if "done" in sts:  # advisory passes: one failing never loses the plan result. Order: security, review (+simplify), code-verify, ship
-            for key, fn in (("security", lambda: plan_audit(ctx, "security")), ("review", lambda: review_pass(ctx)), ("verify", lambda: plan_audit(ctx, "verify")), ("ship", lambda: ship_pass(ctx))):
+            for key, fn in (("security", lambda: plan_audit(ctx, "security")), ("scout", lambda: scout_pass(ctx)), ("review", lambda: review_pass(ctx)), ("verify", lambda: plan_audit(ctx, "verify")), ("ship", lambda: ship_pass(ctx))):
                 try:
                     state[key] = fn()
                 except Exception as e:
@@ -853,6 +857,48 @@ def plan_audit(ctx, kind):
     return {"status": "ok", "hard": r["hard"][:15], "soft": r["soft"][:15], "n_hard": len(r["hard"]), "n_soft": len(r["soft"])}
 
 
+def scout_pass(ctx):
+    """The hands for the head: when code steps run on a cheaper model than the deciding one (Gemini parent: GPT-OSS), that model reads the merged result once
+    and gathers quoted facts; review and the SHIP personas decide on those instead of each re-reading the repository. Every quote is checked against the file in
+    code (method.parse_scout); the notes stay the scout's own reading. Off with FLOW_SCOUT=0, and when both chains start on the same model (nothing to save)."""
+    if os.environ.get("FLOW_SCOUT", "1") != "1" or ctx.code_chain[:1] == ctx.chain[:1]:
+        return {"status": "off"}
+    with ctx.slock:
+        cap = min(float(os.environ.get("FLOW_SCOUT_USD", "0.10")), ctx.free())
+    if cap < 0.02:
+        return {"status": "not_run", "error": "plan budget used up"}
+    wt, base = str(ctx.plan_wt), ctx.plan["base"]
+    changed = git(wt, "diff", "--name-only", f"{base}..HEAD").stdout.splitlines()
+    res, cost, tok = agents.call(ctx.code_chain, method.scout_prompt(ctx.plan["goal"], (ctx.plan.get("analysis") or {}).get("spec", ""), changed), agents.Opts(wt, agents.READ_TOOLS, cap, 300), [])
+    ctx.add_cost(cost, tok, role="scout", backend=res.backend)
+    if not res.ok:
+        return {"status": "not_run", "error": redact(res.error)[:200]}
+    try:
+        return method.parse_scout(extract_json(res.text), wt)
+    except PlanError as e:
+        return {"status": "not_run", "error": f"scout reply unusable: {e}"[:200]}
+
+
+def _json_call(ctx, chain, prompt, opts, role):
+    """One agent call that must answer with a JSON object. An unparsable reply (a model that spent its budget thinking, or answered in prose) gets one retry;
+    the error keeps the tail of the last reply, so the failure can be read afterwards."""
+    err = ""
+    for attempt in (0, 1):
+        res, cost, tok = agents.call(chain, prompt + ("\n\nYour previous reply was not a JSON object. Reply with the JSON object only, no prose, no code fence." if attempt else ""), opts, [])
+        ctx.add_cost(cost, tok, role=role, backend=res.backend)
+        if not res.ok:
+            raise PlanError(redact(res.error)[:200])
+        try:
+            return extract_json(res.text)
+        except PlanError as e:
+            err = f"{e}; reply tail: {redact(res.text)[-300:]!r}"
+    raise PlanError(err)
+
+
+def _facts(ctx):
+    return redact(method.scout_text((ctx.state.get("scout") or {}).get("facts") or []))
+
+
 def review_pass(ctx):
     """Steps 10-11: one read-only agent call over the merged diff. Advisory: a failure or a finding never changes the plan status."""
     if os.environ.get("FLOW_REVIEW", "1") != "1":
@@ -864,14 +910,11 @@ def review_pass(ctx):
     wt, base = str(ctx.plan_wt), ctx.plan["base"]
     changed = git(wt, "diff", "--name-only", f"{base}..HEAD").stdout.splitlines()
     diff = method.cap_diff(git(wt, "diff", f"{base}..HEAD").stdout, int(os.environ.get("FLOW_REVIEW_BYTES", "30000")))
-    res, cost, tok = agents.call(ctx.chain, method.review_prompt(ctx.plan["goal"], (ctx.plan.get("analysis") or {}).get("spec", ""), changed, diff), agents.Opts(wt, agents.READ_TOOLS, cap, 300), [])
-    ctx.add_cost(cost, tok)
-    if not res.ok:
-        return {"status": "not_run", "error": redact(res.error)[:200]}
     try:
-        return method.parse_review(extract_json(res.text), set(changed))
+        data = _json_call(ctx, ctx.chain, method.review_prompt(ctx.plan["goal"], (ctx.plan.get("analysis") or {}).get("spec", ""), changed, diff, _facts(ctx)), agents.Opts(wt, agents.READ_TOOLS, cap, 300), "review")
+        return method.parse_review(data, set(changed))
     except PlanError as e:
-        return {"status": "not_run", "error": f"review reply unusable: {e}"[:200]}
+        return {"status": "not_run", "error": f"review reply unusable: {e}"[:500]}
 
 
 def ship_pass(ctx):
@@ -892,19 +935,16 @@ def ship_pass(ctx):
         diff = method.cap_diff(full, int(os.environ.get("FLOW_SHIP_BYTES", "20000")))
         with ctx.slock:
             cap = min(float(os.environ.get("FLOW_SHIP_USD", "0.08")), ctx.free() / 3)
-        spec = (ctx.plan.get("analysis") or {}).get("spec", "")
+        spec, facts = (ctx.plan.get("analysis") or {}).get("spec", ""), _facts(ctx)
 
         def one(name):
             if cap < 0.02:
                 return {"status": "not_run", "error": "plan budget used up"}
             try:
-                res, cost, tok = agents.call(ctx.chain, method.persona_prompt(name, ctx.plan["goal"], spec, changed, diff), agents.Opts(wt, agents.READ_TOOLS, cap, 300), [])
-                ctx.add_cost(cost, tok)
-                if not res.ok:
-                    return {"status": "not_run", "error": redact(res.error)[:200]}
-                return method.parse_persona(name, extract_json(res.text), set(changed))
+                data = _json_call(ctx, ctx.chain, method.persona_prompt(name, ctx.plan["goal"], spec, changed, diff, facts), agents.Opts(wt, agents.READ_TOOLS, cap, 300), f"ship:{name}")
+                return method.parse_persona(name, data, set(changed))
             except Exception as e:  # one persona failing must not hide the others
-                return {"status": "not_run", "error": f"{type(e).__name__}: {e}"[:200]}
+                return {"status": "not_run", "error": f"{type(e).__name__}: {e}"[:500]}
         with ThreadPoolExecutor(len(method.PERSONAS)) as pool:
             personas = dict(zip(method.PERSONAS, pool.map(one, method.PERSONAS)))
     verdict = method.decide(ctx.plan, st, personas, changed, small, st.get("review"))
@@ -1028,6 +1068,14 @@ def report(pid):
         L += [f"- bỏ {rv['dropped']} phát hiện không trỏ vào file trong diff"] if rv.get("dropped") else []
     L += method.audit_md("Code verify (chống code ẩu trên toàn bộ diff)", st.get("verify"))
     L += [""] + method.ship_md(st.get("ship") or {})
+    agg = {}
+    for c in st.get("calls", []):  # who spent which tokens on which model
+        a = agg.setdefault((c["role"].split(":")[0], c["backend"]), [0, 0, 0, 0, 0])
+        for i, v in enumerate((1, c.get("input_tokens", 0), c.get("cache_read", 0), c.get("output_tokens", 0), c.get("thinking", 0))):
+            a[i] += v
+    if agg:
+        L += ["", "## Token theo vai trò", "", "| Vai trò | Backend | Lượt | Input | Cache đọc | Output | Suy nghĩ |", "|---|---|---|---|---|---|---|"]
+        L += [f"| {r} | {b} | {a[0]} | {a[1]} | {a[2]} | {a[3]} | {a[4]} |" for (r, b), a in agg.items()]
     L += ["", "## Cách review", f"- `git diff {plan['base'][:10]}..flow/{pid}` xem toàn bộ thay đổi", f"- `git merge flow/{pid}` khi đồng ý; `git worktree remove plans/{pid}/wt/_plan` để dọn"]
     (d / "report.md").write_text(redact("\n".join(L) + "\n"), encoding="utf-8")
     _atomic(d / "report.json", redact(json.dumps({"plan": plan, "state": st}, indent=2, ensure_ascii=False)))

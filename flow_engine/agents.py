@@ -295,7 +295,8 @@ def run_agy(model, prompt, o):
     except Exception:
         return _fail(p.stderr or p.stdout or f"exit {p.returncode}", name)
     u = r.get("usage", {})
-    tokens = dict(input_tokens=u.get("input_tokens", 0), cache_read=u.get("cache_read_tokens", 0), cache_create=0, output_tokens=u.get("output_tokens", 0))
+    tokens = dict(input_tokens=u.get("input_tokens", 0), cache_read=u.get("cache_read_tokens", 0), cache_create=0, output_tokens=u.get("output_tokens", 0),
+                  thinking=u.get("thinking_tokens", 0))
     sid = r.get("conversation_id", "") or o.resume
     if r.get("status") != "SUCCESS":
         res = _fail(f"{r.get('status')}: {r.get('response', '')}", name)
