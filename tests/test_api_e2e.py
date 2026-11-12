@@ -5,6 +5,7 @@ reaches no file under the plan directory. Fake binaries and helpers come from te
 """
 
 import json
+import sys
 
 import pytest
 
@@ -38,6 +39,7 @@ def server(monkeypatch):
     srv.server_close()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="fake binaries are POSIX scripts")
 def test_whole_plan_with_api_in_the_chain_counts_tokens_and_never_leaks_the_key(env, server):
     env.script([step("s1", files=FILES, acc="test -f a.py && test -f b.py && test -f c.py")],
                {"s1": {"files": {f: f"{f} = 1\n" for f in FILES}}})
