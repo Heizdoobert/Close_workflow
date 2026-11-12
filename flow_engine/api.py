@@ -28,8 +28,8 @@ cache = {}  # sha256 key -> answer text
 _lock = threading.Lock()
 
 
-def _fail(msg, name, transient=False, retry_after=0.0):
-    return agents.Result(False, error=msg[:400], transient=transient, backend=name, retry_after=retry_after)
+def _fail(msg, name, transient=False, retry_after=0.0, tokens=None, budget=False):
+    return agents.Result(False, error=msg[:400], transient=transient, backend=name, retry_after=retry_after, tokens=dict(tokens or {}), budget=budget)
 
 
 def git_env():
@@ -73,6 +73,13 @@ def _breaker_failed(provider):
     with _lock:
         breaker[provider] = breaker.get(provider, 0) + 1
         breaker_at[provider] = time.time()
+
+
+def _breaker_rearm(provider):
+    """A permanent answer to the half-open probe: the count stays, the cool-down restarts from now (the probe may have taken longer than the cool-down)."""
+    with _lock:
+        if breaker.get(provider, 0) >= BREAKER_LIMIT:
+            breaker_at[provider] = time.time()
 
 
 def _breaker_ok(provider):
@@ -121,7 +128,7 @@ def run_api(model, prompt, o):
         est_in = math.ceil(len(prompt) / float(os.environ.get("FLOW_TOKEN_CHARS") or 3))
         max_tokens = min(max_tokens, token_cap - est_in)
         if max_tokens < 256:
-            return _fail("invalid argument: token budget too small for this call", name)
+            return _fail("invalid argument: token budget too small for this call", name, budget=True)
     base = os.environ.get("FLOW_API_BASE_URL") or DEFAULT_BASE[provider]
     send = apiclient.anthropic_call if provider == "anthropic" else apiclient.openai_call
     try:
@@ -129,6 +136,8 @@ def run_api(model, prompt, o):
     except apiclient.ApiError as e:
         if e.transient:  # a 400/401/404 says nothing about the endpoint's health: only transient failures open the breaker
             _breaker_failed(provider)  # also re-arms the cool-down when this was the half-open probe
+        else:
+            _breaker_rearm(provider)
         _log(o, provider, model, {}, 0.0, started, "transient" if e.transient else "error")
         return _fail(str(e), name, transient=e.transient, retry_after=float(e.retry_after or 0.0))
     except (KeyError, IndexError, TypeError, AttributeError):
@@ -137,7 +146,7 @@ def run_api(model, prompt, o):
     _breaker_ok(provider)
     if out["truncated"] or not out["text"].strip():
         _log(o, provider, model, out["usage"], 0.0, started, "truncated" if out["truncated"] else "empty")
-        return _fail("empty or truncated answer", name)  # not transient, not cached
+        return _fail("empty or truncated answer", name, tokens=out["usage"])  # billed, so counted; not transient, not cached
     tokens = dict(out["usage"])
     priced = apiprice.cost_of(model, tokens)  # None without FLOW_PRICE_*: the log keeps that null; USD is optional, the plan budgets tokens
     _log(o, provider, model, tokens, priced, started, "ok")

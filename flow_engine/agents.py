@@ -52,6 +52,7 @@ class Result:
     backend: str = ""
     session: str = ""  # agy conversation id, lets a retry continue instead of restart
     retry_after: float = 0.0  # seconds the server asked us to wait (HTTP Retry-After); call() waits at least this long, still under its ceiling
+    budget: bool = False  # the plan's token budget refused this call: no later backend may take it over, a CLI call cannot be capped
 
 
 @dataclass
@@ -423,6 +424,9 @@ def call(chain, prompt, o, trace=None, sleep=time.sleep):
                 trace.append({**ev, "action": f"retry in {delay:.1f}s" + (" (same conversation)" if res.session else "")})
                 sleep(delay)
                 continue
+            if res.budget:
+                trace.append({**ev, "action": "token budget used up: no fallback to a backend that cannot be capped"})
+                return last, spent, tokens
             if pinned:
                 trace.append({**ev, "action": "pinned model: no fallback to another model" + (" (permanent error)" if permanent else " (retries exhausted)")})
                 return last, spent, tokens
