@@ -1,6 +1,7 @@
 """The 16-step method: analysis block (research..spec), blast-radius gate, review + simplify pass, coverage table in the report, SHIP decision. Interview, security and code-verify have their own test files."""
 
 import json
+import shutil
 import subprocess
 import sys
 
@@ -175,6 +176,25 @@ def test_review_findings_are_kept_only_for_files_in_the_diff(env, monkeypatch):
     for needle in ("Độ phủ 16 bước", "no guard for a negative value", "inline the constant", "negative value", "Phân tích (nghiên cứu", "nguyên nhân gốc", "blast_radius qua ở 1/1"):
         assert needle in rep, needle
     assert "invented" not in rep
+
+
+def test_the_diff_sent_to_review_and_ship_has_its_key_shaped_secrets_masked(env, monkeypatch):
+    real_which = shutil.which
+    monkeypatch.setattr(shutil, "which", lambda name, *a, **k: None if name == "gitleaks" else real_which(name, *a, **k))  # the test must not depend on gitleaks being installed
+    key = "".join(["AKIA", "ABCDEFGHIJKLMNOP"])  # built at runtime: no key-shaped literal in this file. Already in the repo, so only the diff's context lines carry it
+    (env.repo / "cfg.py").write_text(f'KEY = "{key}"\nA = 1\n')
+    _git(env.repo, "add", "-A")
+    _git(env.repo, "commit", "-q", "-m", "cfg")
+    seen = []
+    real = plan.agents.call
+    monkeypatch.setattr(plan.agents, "call", lambda chain, prompt, o, t: (seen.append(prompt), real(chain, prompt, o, t))[1])
+    env.script([step("s1", files=["cfg.py", "b.py", "c.py"], acc="python3 -c 'import cfg, b, c'")],  # three files: a smaller change skips the SHIP fan-out
+               {"s1": {"files": {"cfg.py": f'KEY = "{key}"\nA = 2\n', "b.py": "B = 1\n", "c.py": "C = 1\n"}}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) == "done"
+    diffs = [p for p in seen if "A = 2" in p and "+++ b/cfg.py" in p]
+    assert len(diffs) >= 2  # the review and at least one SHIP persona saw the diff
+    assert all(key not in p and "[REDACTED]" in p for p in diffs) and not [p for p in seen if key in p]
 
 
 def test_all_sixteen_steps_appear_in_the_coverage_table(env, monkeypatch):

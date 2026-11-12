@@ -156,7 +156,7 @@ def test_gpt_oss_parent_runs_the_whole_plan_on_that_model_only(env, monkeypatch)
     assert OSS in rep and "same conversation" in rep
 
 
-def test_gemini_parent_runs_code_steps_on_gpt_oss_and_planning_and_other_steps_on_gemini(env, monkeypatch):
+def test_gemini_parent_only_plans_and_decides_every_hands_on_call_runs_on_gpt_oss(env, monkeypatch):
     gem = "gemini-3.8-flash-high"
     monkeypatch.setenv("FAKE_SCOUT", json.dumps({"facts": [{"file": "a.py", "line": 9, "quote": "value = 1", "note": "the constant"},
                                                            {"file": "a.py", "line": 1, "quote": "value = 2", "note": "not in the file"},
@@ -165,13 +165,16 @@ def test_gemini_parent_runs_code_steps_on_gpt_oss_and_planning_and_other_steps_o
                {"s1": {"files": {"a.py": "value = 1\n"}}, "s2": {"files": {"notes.md": "n\n"}}})
     pid = plan.create("g", parent_model=gem)
     assert plan.approve(pid, wait_for=True) == "done"
-    # planner, code step, general step, then the scout (GPT-OSS reads for Gemini) and the review that decides on its facts
-    assert [c[1] for c in env.calls() if c[0] == "agy"] == [gem, OSS, gem, OSS, gem]
+    # map of the repo (GPT-OSS), planner, both steps (GPT-OSS, even the one marked general), then the scout (GPT-OSS) and the review that decides on its facts
+    assert [c[1] for c in env.calls() if c[0] == "agy"] == [OSS, gem, OSS, OSS, OSS, gem]
     assert [c for c in env.calls() if c[0] == "review"] == [["review", "scouted"]]
     st = json.loads((env.home / "plans" / pid / "state.json").read_text())
     assert st["scout"] == {"status": "ok", "facts": [{"file": "a.py", "line": 1, "quote": "value = 1", "note": "the constant"}], "dropped": 2}  # only the quote that is really in the file
-    assert [(c["role"], c["backend"]) for c in st["calls"]] == [("planner", f"agy:{gem}"), ("step:s1", f"agy:{OSS}"), ("step:s2", f"agy:{gem}"), ("scout", f"agy:{OSS}"), ("review", f"agy:{gem}")]
+    assert [(c["role"], c["backend"]) for c in st["calls"]] == [("map", f"agy:{OSS}"), ("planner", f"agy:{gem}"), ("step:s1", f"agy:{OSS}"), ("step:s2", f"agy:{OSS}"), ("scout", f"agy:{OSS}"), ("review", f"agy:{gem}")]
     assert "| scout | agy:gpt-oss-120b-medium | 1 | 7 |" in (env.home / "plans" / pid / "report.md").read_text()
+    for k, v in st["tokens"].items():  # the totals count the map and planner calls too: they agree with the ledger rows
+        assert v == sum(c.get(k, 0) for c in st["calls"]), k
+    assert st["tokens"]["input_tokens"] > 0
     assert [s["kind"] for s in json.loads((env.home / "plans" / pid / "plan.json").read_text())["steps"]] == ["code", "general"]  # a missing or unknown kind means code
 
 

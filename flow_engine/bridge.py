@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -27,8 +28,17 @@ def run_agent(*args, cwd=None, timeout=60):
         return subprocess.CompletedProcess(args, 1, "", str(e))
 
 
-def recall(message, max_bytes=1200):
-    """Prior insights relevant to the task, as a short prompt prefix ('' when nothing useful)."""
+ABS_PATH = re.compile(r"(?<![\w.])/(?:mnt|home|Users|opt|srv|var)/[^\s,;:)\]]+")
+
+
+def local(item, root):
+    """False when an insight cites an absolute path outside the repo being worked on: an agent given a foreign path reads and writes there (Light-Story audit, 2026-11-11)."""
+    root = os.path.realpath(root or os.environ.get("FLOW_WORKDIR") or os.getcwd())
+    return all(os.path.realpath(p) == root or os.path.realpath(p).startswith(root + os.sep) for p in ABS_PATH.findall(item))
+
+
+def recall(message, max_bytes=1200, root=None):
+    """Prior insights relevant to the task, as a short prompt prefix ('' when nothing useful). Insights naming paths outside `root` (default FLOW_WORKDIR or cwd) are dropped."""
     if os.environ.get("FLOW_RECALL", "1") != "1":
         return ""
     p = run_agent("memory", "search", "--query", message[:300], "--top-k", "3", timeout=30)
@@ -36,6 +46,7 @@ def recall(message, max_bytes=1200):
         items = [r["content"][:200] for r in json.loads(p.stdout)]
     except Exception:
         return ""
+    items = [i for i in items if local(i, root)]
     text = "Known from earlier tasks (use only if relevant):\n" + "\n".join(f"- {i}" for i in items)
     return text.encode()[:max_bytes].decode(errors="ignore") + "\n\n" if items else ""
 

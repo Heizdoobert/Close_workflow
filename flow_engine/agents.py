@@ -348,13 +348,13 @@ BACKENDS = {"claude": run_claude, "agy": run_agy, "opencode": run_opencode}
 def policy_chain(parent_model, role="code"):
     """Sub-agent model policy from the model of the agent that handed us the work (its own id, e.g. from `agy models`).
     GPT-OSS 120B parent  -> inherit it, pinned: no other model, ever.
-    Gemini Flash parent  -> role "code" (steps that write code, quick work): prefer GPT-OSS 120B with persistent retries; only if it truly cannot be called, Gemini.
-                            role "general" (planner, non-code steps, review, SHIP): Gemini itself, then the lighter one."""
+    Gemini Flash parent  -> role "code" (map, steps, scout: all hands-on work): GPT-OSS 120B pinned, persistent retries, never Gemini: if it cannot be called the work fails.
+                            role "general" (planner, review, SHIP): Gemini itself, then the lighter one."""
     m = (parent_model or "").lower()
     if re.search(r"gpt-?oss.*120b", m):
         return [f"agy:{parent_model}!"]
     if "gemini" in m and "flash" in m:
-        return [f"agy:{GPT_OSS}+"] * (role == "code") + [f"agy:{parent_model}", "agy:gemini-3.8-flash-low"]
+        return [f"agy:{GPT_OSS}!"] if role == "code" else [f"agy:{parent_model}", "agy:gemini-3.8-flash-low"]
     return []
 
 

@@ -9,6 +9,7 @@ resource ownership.
 import ast
 import os
 import re
+import subprocess
 
 TEXT_SKIP = re.compile(r"(?i)\.(md|rst|txt|json|lock)$")  # prose and data mention these words legitimately
 DEPS = re.compile(r"(?i)(^|/)(requirements[^/]*\.txt|pyproject\.toml|package(-lock)?\.json|yarn\.lock|pnpm-lock\.yaml|Pipfile(\.lock)?|poetry\.lock|go\.(mod|sum)|Cargo\.(toml|lock))$")
@@ -95,6 +96,10 @@ def _py_findings(f, src, nums, hard, soft):
     used = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)} | {s.value for n in ast.walk(tree) if isinstance(n, ast.Assign) and any(getattr(t, "id", "") == "__all__" for t in n.targets)
                                                                            for s in ast.walk(n.value) if isinstance(s, ast.Constant) and isinstance(s.value, str)}
     lines = src.splitlines()
+    base = os.path.basename(f)
+    if (base.startswith("test_") or base.endswith("_test.py")) and nums and not any(
+            isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name.startswith("test") or isinstance(n, ast.ClassDef) and n.name.startswith("Test") for n in ast.walk(tree)):
+        hard.append(f"{f}:1 test file defines no test (the whole file may sit inside an unclosed docstring)")  # pytest then collects nothing and only says "no tests ran"
     for n in ast.walk(tree):
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.lineno in nums:
             if is_test_file(f) and n.name.startswith("test") and not _has_assert(n):
@@ -112,9 +117,55 @@ def _py_findings(f, src, nums, hard, soft):
                         soft.append(f"{f}:{n.lineno} unused import {name}")
 
 
+CITE = re.compile(r"(?<![\w/.:-])((?:[\w.-]+/)*[\w.-]+\.(?:py|sh|js|ts|tsx|json|toml|ya?ml|md|txt|cfg|ini|html|css|go|rs|java|rb|php)):(\d+)\b")
+PIN = re.compile(r"(?<![\w.-])([A-Za-z][\w.-]*)==(\d[\w.+!-]*)")
+MANIFEST = re.compile(r"(?i)\.(txt|toml|cfg|lock|in|json|ya?ml)$")
+
+
+def _norm(pin):
+    return re.sub(r"[-_.]+", "-", pin).lower()
+
+
+def claims(root, added):
+    """Doc claims that can be checked in code: a `file:line` citation must name a file in the tree with that line, and a `name==version` pin must appear in a manifest.
+    Only the added lines of Markdown are read. A model that writes `airtest==1.2.3` while requirements.txt says 1.3.6 fails here (0 tokens); what a sentence means is not checked."""
+    hard, pins, names = [], None, None
+    for f, n, text in added:
+        if not f.lower().endswith(".md"):
+            continue
+        for path, line in CITE.findall(text):
+            if names is None:
+                names = {}
+                for g in subprocess.run(["git", "ls-files", "-z", "-co", "--exclude-standard"], cwd=root, capture_output=True, text=True).stdout.split("\0"):
+                    if g:
+                        names.setdefault(os.path.basename(g), []).append(g)
+            cands = [path] if os.path.isfile(os.path.join(root, path)) else names.get(path, []) if "/" not in path else []  # a bare name stands for any file of that name
+            totals = []
+            for c in cands:
+                try:
+                    totals.append(len(open(os.path.join(root, c), encoding="utf-8", errors="replace").read().splitlines()))
+                except OSError:
+                    pass
+            if not cands:
+                hard.append(f"{f}:{n} cites {path}:{line} but that file does not exist")
+            elif totals and not 1 <= int(line) <= max(totals):
+                hard.append(f"{f}:{n} cites {path}:{line} but the file has {max(totals)} lines")
+        for name, ver in PIN.findall(text):
+            if pins is None:
+                files = subprocess.run(["git", "ls-files", "-z", "-co", "--exclude-standard"], cwd=root, capture_output=True, text=True).stdout.split("\0")
+                pins = set()
+                for g in files:
+                    gp = os.path.join(root, g)
+                    if g and MANIFEST.search(g) and os.path.isfile(gp) and os.path.getsize(gp) < 2_000_000:
+                        pins |= {(_norm(a), b) for a, b in PIN.findall(open(gp, encoding="utf-8", errors="replace").read())}
+            if (_norm(name), ver) not in pins:
+                hard.append(f"{f}:{n} claims pin {name}=={ver} but no manifest in the tree has it")
+    return hard
+
+
 def verify(root, added, declared, deleted):
     """Step 13: what sloppy code leaves behind in the lines a change adds. `declared` = files the plan said would exist; `deleted` = files the diff removes on purpose."""
-    hard, soft, by_file = [], [], {}
+    hard, soft, by_file = claims(root, added), [], {}
     for f, n, text in added:
         if not TEXT_SKIP.search(f):
             by_file.setdefault(f, {})[n] = text

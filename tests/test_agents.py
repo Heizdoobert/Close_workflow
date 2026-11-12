@@ -79,7 +79,7 @@ def test_hard_error_falls_back_to_next_backend_without_retrying_it(fakes, monkey
 def test_policy_chains():
     assert agents.policy_chain(OSS) == [f"agy:{OSS}!"]
     assert agents.policy_chain("GPT-OSS 120B (Medium)") == ["agy:GPT-OSS 120B (Medium)!"]
-    assert agents.policy_chain("gemini-3.8-flash-high") == [f"agy:{OSS}+", "agy:gemini-3.8-flash-high", "agy:gemini-3.8-flash-low"]
+    assert agents.policy_chain("gemini-3.8-flash-high") == [f"agy:{OSS}!"]  # hands-on work: GPT-OSS only, never Gemini
     assert agents.policy_chain("gemini-3.8-flash-high", "general") == ["agy:gemini-3.8-flash-high", "agy:gemini-3.8-flash-low"]  # planner, review, SHIP stay on Gemini
     assert agents.policy_chain(OSS, "general") == [f"agy:{OSS}!"]  # a GPT-OSS parent is pinned for every role
     assert agents.policy_chain("claude-sonnet-4-6") == [] and agents.policy_chain(None) == []
@@ -127,13 +127,13 @@ def test_gemini_flash_parent_prefers_gpt_oss_and_stays_on_it_through_503(fakes, 
     assert res.ok and {c[1] for c in calls(fakes)} == {OSS}
 
 
-def test_gemini_flash_parent_goes_lighter_only_when_gpt_oss_truly_unusable(fakes, monkeypatch):
+def test_gemini_flash_parent_hands_on_work_fails_without_gpt_oss_while_planning_falls_back_to_lighter_gemini(fakes, monkeypatch):
     monkeypatch.setenv("FAKE_AGY_DEAD", OSS)
-    chain = agents.chain_from_env("claude:haiku", "gemini-3.8-flash-high")
-    res, _, _ = agents.call(chain, "planning agent", agents.Opts(str(fakes)), [])
-    assert res.ok and res.backend == "agy:gemini-3.8-flash-high"
-    assert [c[1] for c in calls(fakes)] == [OSS, "gemini-3.8-flash-high"]
-    monkeypatch.setenv("FAKE_AGY_DEAD", f"{OSS},gemini-3.8-flash-high")
+    monkeypatch.setenv("FLOW_PIN_RETRIES", "1")
+    res, _, _ = agents.call(agents.chain_from_env("claude:haiku", "gemini-3.8-flash-high", "code"), "step", agents.Opts(str(fakes)), [])
+    assert not res.ok and {c[1] for c in calls(fakes)} == {OSS}  # Gemini is never asked to do the hands-on work
+    chain = agents.chain_from_env("claude:haiku", "gemini-3.8-flash-high", "general")
+    monkeypatch.setenv("FAKE_AGY_DEAD", "gemini-3.8-flash-high")
     res, _, _ = agents.call(chain, "planning agent", agents.Opts(str(fakes)), [])
     assert res.ok and res.backend == "agy:gemini-3.8-flash-low"
 

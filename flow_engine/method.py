@@ -112,6 +112,15 @@ def scout_prompt(goal, spec, changed):
             "A fact whose quote is not found verbatim in the file is thrown away. To say something is missing, quote the line where it would be expected.")
 
 
+def map_prompt(goal):
+    return ("You are the scout of an automated engineering system. Read-only: do not edit anything. The repository is in your current directory.\n"
+            "The planner who must plan this goal will rely on what you gather, so they do not have to search the repository. Gather facts, do not judge or design.\n"
+            f"Goal: {goal}\n\n"
+            "Find the files, functions and tests this goal touches, who calls them, what they import, how the code is laid out, the conventions to follow and how tests are run. Up to 40 facts.\n"
+            'Reply with ONLY one JSON object: {"facts":[{"file":"path","line":0,"quote":"one line copied exactly from that file","note":"what this line shows"}]}\n'
+            "A fact whose quote is not found verbatim in the file is thrown away.")
+
+
 def parse_scout(obj, wt):
     """Keep a fact only when its quote is really a line of the file it names (inside the worktree); the line number is corrected to where the quote is."""
     root, facts, raw, cache = Path(wt).resolve(), [], [i for i in (obj.get("facts") if isinstance(obj.get("facts"), list) else []) if isinstance(i, dict)], {}

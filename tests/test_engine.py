@@ -133,3 +133,10 @@ def test_cli_redis_down_is_a_clean_error(monkeypatch, capsys):
     monkeypatch.setenv("REDIS_PORT", "1")
     assert cli.main(["x"]) == 1
     assert "Failed to reach Redis" in capsys.readouterr().err
+
+
+def test_recall_drops_insights_that_name_another_repo(monkeypatch, tmp_path):
+    from flow_engine import bridge
+    assert bridge.local("note about " + str(tmp_path) + "/a.py", tmp_path)
+    assert not bridge.local("[FILE] /mnt/second_drive/Light-Story/src/index.ts", tmp_path)
+    assert bridge.local("no paths here", tmp_path)
