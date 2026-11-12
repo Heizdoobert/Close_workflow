@@ -50,5 +50,17 @@
 - Env vars (names only, values are never logged or stored): `ANTHROPIC_API_KEY` (provider anthropic, Messages API), `OPENAI_API_KEY` (provider openai, chat completions), `FLOW_API_BASE_URL` (overrides the endpoint for both providers: a fake server, vLLM, an OpenAI-compatible gateway), `FLOW_PRICE_<MODEL>` (price per million tokens as `input,cache_read,cache_write,output`), `FLOW_POLICY_API_<ROLE>` (optional last rung in the role's chain; unset = no change), `FLOW_API_CACHE=1` (exact-match cache for retries only, off by default), `FLOW_API_RETRIES`, `FLOW_API_MAX_TOKENS`.
 - A missing key is a permanent error: the chain falls through to the next backend. 429 and 5xx are transient and honour Retry-After; a per-backend circuit breaker stops a dead endpoint from burning every step's retries.
 - Prices come only from `FLOW_PRICE_<MODEL>` that you set. A model with no price reports cost unknown (flagged in the ledger), never 0.
-- **Limit:** API mode currently serves only roles that need no tools: planner, interview rounds, review and SHIP personas. map, steps and scout need an in-process tool loop that does not exist yet, so they stay on CLI, and a call that asks for write tools (Edit, Write, Bash) is refused. Read-only tool roles (map, scout) are not yet refused at the chain level: they would get a plain completion with no tools, so keep them on CLI until the loop exists.
+- **Limit:** the in-process tool loop does not exist yet. API mode serves only calls that set `prompt_only` (`agents.Opts.prompt_only`): the review pass, the three SHIP personas and the interview round. Their prompt already holds everything they need. Planner, map, scout and steps do not set it, so they stay on CLI; any call without `prompt_only` is refused with 'invalid argument: api backend only serves prompt-only calls'.
+- `https` is required for `FLOW_API_BASE_URL` except for the hosts localhost, 127.0.0.1 and ::1; any other http URL is a permanent error before any request, so the key is never sent in clear text.
+- Redirects are refused: a 3xx answer is a permanent error, so the key header is never re-sent to another host.
+- `FLOW_API_MAX_BYTES` caps the response body and defaults to 4000000; a larger body is a permanent error.
+- `FLOW_API_CACHE_MIN_CHARS` defaults to 4000: a prompt at least that long is sent as one user text block with Anthropic `cache_control` ephemeral; a shorter prompt is sent without it. The saving from `cache_control` is not measured.
 - `flow-task doctor` shows which modes are usable (CLI present, key present per provider) and never prints a key.
+
+## Tokens (the unit of cost)
+- Tokens are the unit of cost. Every backend (claude, agy, opencode, api) reports tokens; USD is optional and only known where you set a price.
+- `FLOW_PLAN_MAX_TOKENS` is the billable-token budget for one plan (0 = off, the default). Billable = fresh input + cache writes + output + thinking; `FLOW_BUDGET_CACHE_READ=1` adds cache reads to the count.
+- `FLOW_TOKEN_CHARS` is the chars-per-token divisor used for the rough estimate (default 3). It is an estimate, not an exact count.
+- An API call is capped through `Opts.token_cap`: the estimated input plus max_tokens must fit in the budget left. A running CLI call cannot be capped, so the plan can overshoot the budget by one call.
+- USD stays optional: set `FLOW_PRICE_<MODEL>` (price per million tokens) to get a cost; without it the cost is unknown, never 0.
+- The plan report has a `## Token tổng` section with the billable total, the cache reads and the split per backend.

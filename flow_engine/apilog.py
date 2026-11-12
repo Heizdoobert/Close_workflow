@@ -19,8 +19,8 @@ def line(role, backend, model, usage, cost, latency_ms, status):
         "backend": str(backend),
         "model": str(model),
         **counts,
-        "cost": None if cost is None else round(float(cost), 10),  # a small call is 1e-5 USD: keep the digits
-        "latency_ms": int(latency_ms),
+        "cost_usd": None if cost is None else round(float(cost), 10),  # a small call is 1e-5 USD: keep the digits
+        "duration_ms": int(latency_ms),
         "status": str(status),
     }
     return json.dumps(rec, ensure_ascii=False)
