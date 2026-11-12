@@ -12,7 +12,7 @@ import subprocess
 import threading
 import time
 
-from flow_engine import agents, apiclient, apiprice
+from flow_engine import agents, apiclient, apilog, apiprice, engine
 
 DEFAULT_BASE = {"anthropic": "https://api.anthropic.com", "openai": "https://api.openai.com"}
 KEY_ENV = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
@@ -68,6 +68,12 @@ def _breaker_ok(provider):
         breaker_at.pop(provider, None)
 
 
+def _log(o, provider, model, usage, cost, started, status):
+    """One JSON line for this attempt (apilog.line): no prompt, no key."""
+    latency_ms = (time.monotonic() - started) * 1000
+    engine.log(apilog.line(getattr(o, "role", ""), f"api:{provider}", model, usage, cost, latency_ms, status))
+
+
 def run_api(model, prompt, o):
     provider, _, mid = (model or "").partition("/")
     name = f"api:{model}"
@@ -86,7 +92,9 @@ def run_api(model, prompt, o):
         return _fail(f"invalid argument: {e}", name)
     # ponytail: in-process only, and replaying a stored answer is safe only for an identical prompt on an identical tree (HEAD is the tree here)
     ckey = _cache_key(o.workdir, model, prompt) if os.environ.get("FLOW_API_CACHE") == "1" else None
+    started = time.monotonic()
     if ckey and ckey in cache:
+        _log(o, provider, model, {}, 0.0, started, "cache_hit")
         return agents.Result(True, cache[ckey], 0.0, {"cache_hit": 1}, backend=name)
     if not _breaker_allows(provider):
         return _fail("breaker open", name, transient=True)
@@ -97,12 +105,15 @@ def run_api(model, prompt, o):
         out = send(base, key, mid, "", prompt, max_tokens, o.timeout)
     except apiclient.ApiError as e:
         _breaker_failed(provider)
+        _log(o, provider, model, {}, 0.0, started, "transient" if e.transient else "error")
         return _fail(str(e), name, transient=e.transient)
     except (KeyError, IndexError, TypeError, AttributeError):
+        _log(o, provider, model, {}, 0.0, started, "malformed")
         return _fail("malformed API response", name)
     _breaker_ok(provider)
     tokens = dict(out["usage"])
     cost = apiprice.cost_of(model, tokens)
+    _log(o, provider, model, tokens, cost, started, "ok")
     if cost is None:
         cost = 0.0
         tokens["cost_unknown"] = 1  # flagged in the ledger: an unpriced call is never a silent zero

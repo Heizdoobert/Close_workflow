@@ -60,6 +60,15 @@ def isolated_agent_memory(monkeypatch, tmp_path_factory):
     return db_dir
 
 
+@pytest.fixture(autouse=True)
+def isolated_flow_log(monkeypatch, tmp_path_factory):
+    """Flow log lines (engine.log, API call lines) go to a temp dir, never the repo's logs/."""
+    logs = tmp_path_factory.mktemp("flow_logs")
+    monkeypatch.setattr(engine, "LOGS", logs)
+    monkeypatch.setattr(engine, "LOG", logs / "flow_engine.log")
+    return logs
+
+
 @pytest.fixture
 def fake_redis(monkeypatch, tmp_path):
     srv = socketserver.ThreadingTCPServer(("127.0.0.1", 0), _Handler)
