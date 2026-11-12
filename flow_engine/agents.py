@@ -62,6 +62,7 @@ class Opts:
     timeout: int = 600
     resume: str = ""
     on_group: object = None  # called with the agent's process group id right after it starts (plan.py records it for recover)
+    prompt_only: bool = False  # True: the prompt holds everything the call needs, no repo access. Only the api backend reads it (it has no tools)
 
 
 def claude_bin():

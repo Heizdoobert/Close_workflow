@@ -933,7 +933,7 @@ def review_pass(ctx):
     changed = git(wt, "diff", "--name-only", f"{base}..HEAD").stdout.splitlines()
     diff = method.cap_diff(redact_shapes(git(wt, "diff", f"{base}..HEAD").stdout), int(os.environ.get("FLOW_REVIEW_BYTES", "30000")))
     try:
-        data = _json_call(ctx, ctx.chain, method.review_prompt(ctx.plan["goal"], (ctx.plan.get("analysis") or {}).get("spec", ""), changed, diff, _facts(ctx)), agents.Opts(wt, agents.READ_TOOLS, cap, 300), "review")
+        data = _json_call(ctx, ctx.chain, method.review_prompt(ctx.plan["goal"], (ctx.plan.get("analysis") or {}).get("spec", ""), changed, diff, _facts(ctx)), agents.Opts(wt, agents.READ_TOOLS, cap, 300, prompt_only=True), "review")
         return method.parse_review(data, set(changed))
     except PlanError as e:
         return {"status": "not_run", "error": f"review reply unusable: {e}"[:500]}
@@ -963,7 +963,7 @@ def ship_pass(ctx):
             if cap < 0.02:
                 return {"status": "not_run", "error": "plan budget used up"}
             try:
-                data = _json_call(ctx, ctx.chain, method.persona_prompt(name, ctx.plan["goal"], spec, changed, diff, facts), agents.Opts(wt, agents.READ_TOOLS, cap, 300), f"ship:{name}")
+                data = _json_call(ctx, ctx.chain, method.persona_prompt(name, ctx.plan["goal"], spec, changed, diff, facts), agents.Opts(wt, agents.READ_TOOLS, cap, 300, prompt_only=True), f"ship:{name}")
                 return method.parse_persona(name, data, set(changed))
             except Exception as e:  # one persona failing must not hide the others
                 return {"status": "not_run", "error": f"{type(e).__name__}: {e}"[:500]}

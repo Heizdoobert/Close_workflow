@@ -69,7 +69,7 @@ def test_line_has_no_key_or_key_shape(monkeypatch):
 
 
 def test_run_api_writes_one_line_per_request_and_no_key(server, log_file, tmp_path):
-    o = SimpleNamespace(workdir=str(tmp_path), tools=agents.READ_TOOLS, timeout=30, role="planner")
+    o = SimpleNamespace(workdir=str(tmp_path), tools=agents.READ_TOOLS, timeout=30, prompt_only=True, role="planner")
     ok = api.run_api(MODEL, "plan the step", o)
     assert ok.ok
     server.fail_next = 500
@@ -89,7 +89,7 @@ def test_run_api_writes_one_line_per_request_and_no_key(server, log_file, tmp_pa
 
 def test_run_api_logs_unpriced_model_as_null_cost(server, log_file, monkeypatch, tmp_path):
     monkeypatch.delenv("FLOW_PRICE_ANTHROPIC_CLAUDE_HAIKU")
-    o = SimpleNamespace(workdir=str(tmp_path), tools=agents.READ_TOOLS, timeout=30, role="")
+    o = SimpleNamespace(workdir=str(tmp_path), tools=agents.READ_TOOLS, timeout=30, prompt_only=True, role="")
     res = api.run_api(MODEL, "p", o)
     assert res.ok and res.tokens.get("cost_unknown") == 1
     assert _lines(log_file)[0]["cost"] is None
@@ -100,7 +100,7 @@ def test_cache_hit_is_logged_with_zero_cost(server, log_file, monkeypatch, tmp_p
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True, env=env)
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "base"], cwd=tmp_path, check=True, env=env)
     monkeypatch.setenv("FLOW_API_CACHE", "1")
-    o = SimpleNamespace(workdir=str(tmp_path), tools=agents.READ_TOOLS, timeout=30, role="scout")
+    o = SimpleNamespace(workdir=str(tmp_path), tools=agents.READ_TOOLS, timeout=30, prompt_only=True, role="scout")
     first = api.run_api(MODEL, "same prompt", o)
     second = api.run_api(MODEL, "same prompt", o)
     assert first.ok and second.ok and second.tokens == {"cache_hit": 1}
