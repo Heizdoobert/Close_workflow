@@ -40,7 +40,7 @@ def git_env():
 def _git_out(workdir, *args):
     """stdout of a git command run in workdir, or None when it fails."""
     try:
-        res = subprocess.run(["git", *args], cwd=workdir, capture_output=True, text=True, timeout=10, env=git_env())
+        res = subprocess.run(["git", *args], cwd=workdir, capture_output=True, text=True, errors="replace", timeout=10, env=git_env())  # a diff of a latin-1 file is not UTF-8
     except (OSError, subprocess.TimeoutExpired):
         return None
     return res.stdout if res.returncode == 0 else None

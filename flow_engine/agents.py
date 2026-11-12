@@ -58,6 +58,8 @@ class Result:
     backend: str = ""
     session: str = ""  # agy conversation id, lets a retry continue instead of restart
     over_budget: bool = False  # the call's cost exceeded its budget: never retried, never handed to another backend
+    retry_after: float = 0.0  # seconds the server asked us to wait (HTTP Retry-After); call() waits at least this long, still under its ceiling
+    budget: bool = False  # the plan's token budget refused this call: no later backend may take it over, a CLI call cannot be capped
 
 
 @dataclass
@@ -399,7 +401,8 @@ def chain_from_env(default="claude:haiku", parent_model=None, role="code"):
         if s not in out:
             out.append(s)
     api_rung = os.environ.get(f"FLOW_POLICY_API_{role.upper()}")  # optional last rung per role; unset = no change
-    if api_rung and api_rung.strip() not in out:
+    pinned = any(s.endswith("!") for s in out)  # call() ends at a pinned spec and never falls back: a rung behind it could not run
+    if api_rung and api_rung.strip() not in out and not pinned:
         out.append(api_rung.strip())
     return out
 

@@ -188,8 +188,13 @@ def validate(plan, max_steps=None):
         for k in ("title", "reason", "prompt"):
             if not isinstance(s.get(k), str) or not s[k].strip():
                 raise PlanError(f"step {sid}: missing {k}")
+        for k in ("deps", "files"):  # a string would be split into characters, a number would crash: ask the planner again instead
+            if not isinstance(s.get(k) or [], list):
+                raise PlanError(f"step {sid}: {k} must be a list")
+        if not all(isinstance(f, str) for f in s.get("files") or []):
+            raise PlanError(f"step {sid}: files must be paths (strings)")
         s["deps"] = [str(d) for d in (s.get("deps") or [])]
-        s["files"] = [str(f) for f in (s.get("files") or [])]
+        s["files"] = list(s.get("files") or [])
         for f in s["files"]:
             why = unsafe_path_reason(f)
             if why:

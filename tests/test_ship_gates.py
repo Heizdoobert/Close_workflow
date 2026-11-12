@@ -65,3 +65,26 @@ def test_a_high_review_finding_with_a_line_blocks_and_without_one_only_recommend
     no_line = {"review": [{"file": "a.py", "line": "", "severity": "high", "problem": "p", "fix": "f"}]}
     out = decide({}, review=no_line)
     assert out["decision"] == "GO" and any(r.startswith("review:") for r in out["recommended"])
+
+
+@pytest.mark.parametrize("answer", [{}, {"issues": [{"file": "a.py", "line": 3, "severity": "high"}]}, {"findings": []}, {"review": "none"}, {"review": ["a.py: bad"]}])
+def test_a_review_answer_that_is_not_the_review_schema_is_not_run(answer):
+    r = method.parse_review(answer, {"a.py"})
+    assert r["status"] == "not_run" and "review" not in r
+
+
+def test_an_empty_review_list_is_a_clean_answer():
+    r = method.parse_review({"review": []}, {"a.py"})
+    assert r["status"] == "ok" and r["review"] == []
+
+
+@pytest.mark.parametrize("severity", ["critical", "urgent", "", None])
+def test_an_unknown_review_severity_counts_as_high(severity):
+    item = {"file": "a.py", "line": 3, "severity": severity, "problem": "p", "fix": "f"}
+    assert method.parse_review({"review": [item]}, {"a.py"})["review"][0]["severity"] == "high"
+
+
+def test_a_review_that_did_not_run_is_recommended_not_silent():
+    out = decide({}, review={"status": "not_run", "error": "the answer is not the review schema"})
+    assert out["decision"] == "GO" and any(r.startswith("review: không chạy") for r in out["recommended"])
+    assert not any(r.startswith("review:") for r in decide({}, review={"status": "ok", "review": []})["recommended"])
