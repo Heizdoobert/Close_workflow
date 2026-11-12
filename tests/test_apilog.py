@@ -91,7 +91,7 @@ def test_run_api_logs_unpriced_model_as_null_cost(server, log_file, monkeypatch,
     monkeypatch.delenv("FLOW_PRICE_ANTHROPIC_CLAUDE_HAIKU")
     o = SimpleNamespace(workdir=str(tmp_path), tools=agents.READ_TOOLS, timeout=30, prompt_only=True, role="")
     res = api.run_api(MODEL, "p", o)
-    assert res.ok and res.tokens.get("cost_unknown") == 1
+    assert res.ok and "cost_unknown" not in res.tokens
     assert _lines(log_file)[0]["cost"] is None
 
 

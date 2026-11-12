@@ -63,6 +63,7 @@ class Opts:
     resume: str = ""
     on_group: object = None  # called with the agent's process group id right after it starts (plan.py records it for recover)
     prompt_only: bool = False  # True: the prompt holds everything the call needs, no repo access. Only the api backend reads it (it has no tools)
+    token_cap: int = 0  # api only: most tokens this call may spend (estimated input + max_tokens). 0 = no cap. CLI backends cannot be capped mid-call, so one running call can overshoot a plan's token budget
 
 
 def claude_bin():
