@@ -51,6 +51,7 @@ class Result:
     transient: bool = False
     backend: str = ""
     session: str = ""  # agy conversation id, lets a retry continue instead of restart
+    retry_after: float = 0.0  # seconds the server asked us to wait (HTTP Retry-After); call() waits at least this long, still under its ceiling
 
 
 @dataclass
@@ -412,7 +413,8 @@ def call(chain, prompt, o, trace=None, sleep=time.sleep):
             # pinned/preferred: any error that a retry could cure is retried; others only when transient
             retryable = (res.transient or (pinned or prefer)) and not permanent
             if retryable and attempt < limit:
-                delay = min(ceiling, base * 2 ** attempt) * (0.5 + random.random() / 2)
+                backoff = min(ceiling, base * 2 ** attempt) * (0.5 + random.random() / 2)
+                delay = min(ceiling, max(backoff, res.retry_after))
                 if res.session:  # agy: continue the same conversation instead of starting over
                     oo = replace(o, resume=res.session)
                     prompt_now = "Your previous turn was interrupted by an error. Continue exactly where you stopped and finish the task."
