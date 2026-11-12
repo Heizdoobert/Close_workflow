@@ -621,6 +621,13 @@ def test_acceptance_command_gets_no_credentials_from_the_environment(env, monkey
     assert plan.run(pid) == "done"
 
 
+def test_acceptance_command_keeps_the_git_config_pairs_of_the_runner(env, monkeypatch):
+    for k, v in (("GIT_CONFIG_COUNT", "1"), ("GIT_CONFIG_KEY_0", "core.fileMode"), ("GIT_CONFIG_VALUE_0", "false")):
+        monkeypatch.setenv(k, v)
+    pid = _approved_not_started(env, monkeypatch, acc='test "$(git config --get core.fileMode)" = false && test -f a.py')
+    assert plan.run(pid) == "done"
+
+
 def test_agent_timeout_kills_the_agents_children_too(tmp_path):
     from flow_engine import agents
     pidfile = tmp_path / "pid"
