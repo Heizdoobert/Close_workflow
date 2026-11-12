@@ -8,6 +8,7 @@ A prompt-only call that asks for write tools is refused too.
 """
 
 import hashlib
+import math
 import os
 import subprocess
 import threading
@@ -114,9 +115,15 @@ def run_api(model, prompt, o):
         return agents.Result(True, hit, 0.0, {"cache_hit": 1}, backend=name)
     if not _breaker_allows(provider):
         return _fail("breaker open", name, transient=True)
+    max_tokens = int(os.environ.get("FLOW_API_MAX_TOKENS", "4096"))
+    token_cap = getattr(o, "token_cap", 0)
+    if token_cap > 0:  # the plan's token budget left for this call: the estimated input plus max_tokens must fit in it
+        est_in = math.ceil(len(prompt) / float(os.environ.get("FLOW_TOKEN_CHARS") or 3))
+        max_tokens = min(max_tokens, token_cap - est_in)
+        if max_tokens < 256:
+            return _fail("invalid argument: token budget too small for this call", name)
     base = os.environ.get("FLOW_API_BASE_URL") or DEFAULT_BASE[provider]
     send = apiclient.anthropic_call if provider == "anthropic" else apiclient.openai_call
-    max_tokens = int(os.environ.get("FLOW_API_MAX_TOKENS", "4096"))
     try:
         out = send(base, key, mid, "", prompt, max_tokens, o.timeout)
     except apiclient.ApiError as e:
@@ -132,12 +139,9 @@ def run_api(model, prompt, o):
         _log(o, provider, model, out["usage"], 0.0, started, "truncated" if out["truncated"] else "empty")
         return _fail("empty or truncated answer", name)  # not transient, not cached
     tokens = dict(out["usage"])
-    cost = apiprice.cost_of(model, tokens)
-    _log(o, provider, model, tokens, cost, started, "ok")
-    if cost is None:
-        cost = 0.0
-        tokens["cost_unknown"] = 1  # flagged in the ledger: an unpriced call is never a silent zero
+    priced = apiprice.cost_of(model, tokens)  # None without FLOW_PRICE_*: the log keeps that null; USD is optional, the plan budgets tokens
+    _log(o, provider, model, tokens, priced, started, "ok")
     if ckey:
         with _lock:
             cache[ckey] = out["text"]
-    return agents.Result(True, out["text"], cost, tokens, backend=name)
+    return agents.Result(True, out["text"], priced or 0.0, tokens, backend=name)

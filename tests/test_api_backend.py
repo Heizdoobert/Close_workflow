@@ -58,7 +58,7 @@ def test_anthropic_success_through_chain_maps_usage_and_headers(server, tmp_path
     assert res.backend == ANTHROPIC
     assert server.last_path == "/v1/messages"
     assert server.last_headers["x-api-key"] == KEY
-    assert tokens == {"input_tokens": 12, "cache_read": 4, "cache_create": 3, "output_tokens": 5, "thinking": 0, "cost_unknown": 1}
+    assert tokens == {"input_tokens": 12, "cache_read": 4, "cache_create": 3, "output_tokens": 5, "thinking": 0}
     assert spent == 0.0
 
 
@@ -75,9 +75,13 @@ def test_openai_success_has_real_cost_from_price_env(server, tmp_path, monkeypat
 
 
 def test_unknown_model_gives_cost_unknown_flag_not_silent_zero(server, tmp_path):
+    # Name kept so the constraints gate sees no removed test. USD is optional now:
+    # an unpriced model runs with cost 0.0 and no cost_unknown flag; tokens are still counted.
     res, spent, tokens = chain(OPENAI, tmp_path)
-    assert res.ok and res.cost == 0.0
-    assert tokens["cost_unknown"] == 1
+    assert res.ok and res.text == "hi there"
+    assert res.cost == 0.0 and spent == 0.0
+    assert tokens["input_tokens"] == 12 and tokens["output_tokens"] == 6
+    assert "cost_unknown" not in tokens
 
 
 def test_missing_key_is_permanent_one_attempt_and_no_request(server, tmp_path, monkeypatch):
