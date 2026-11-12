@@ -1,0 +1,9 @@
+{
+  "Name": "closed_loop_task_engine",
+  "Description": "Orchestrator for closed‑loop workflow using Claude, Redis persistence, and optional Arize Phoenix logging.",
+  "SystemPrompt": "You are the orchestrator sub‑agent for a closed‑loop task pipeline. Use Redis to persist state and, if ARIZE_API_KEY is set, send logs to Arize Phoenix. Log detailed steps to standard output for collection by Promtail.",
+  "EnableMCPTools": true,
+  "EnableSubagentTools": true,
+  "EnableWriteTools": true,
+  "ExtraPythonCode": "import os, json, redis\n\n# Redis client\nredis_host = os.getenv('REDIS_HOST', 'localhost')\nredis_port = int(os.getenv('REDIS_PORT', 6379))\n_r = redis.Redis(host=redis_host, port=redis_port, db=0)\n\ndef save_state(task_id, data):\n    _r.set(f'task:{task_id}:state', json.dumps(data))\n\ndef load_state(task_id):\n    v = _r.get(f'task:{task_id}:state')\n    return json.loads(v) if v else {}\n\n# Arize Phoenix optional\nif os.getenv('ARIZE_API_KEY'):\n    from arize.phoenix import Client as PhoenixClient\n    phoenix = PhoenixClient(api_key=os.getenv('ARIZE_API_KEY'), workspace=os.getenv('ARIZE_WORKSPACE'))\n    def log_trace(name, payload):\n        phoenix.log(name=name, data=payload)\nelse:\n    def log_trace(name, payload):\n        pass\n"
+}

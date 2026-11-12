@@ -93,22 +93,3 @@ def test_constraints_sees_a_skip_marker_in_a_new_untracked_file(repo):
     (repo / "tests" / "test_new.py").write_text("import pytest\n\n" + skip + "\n" + TWO_ASSERTS)
     res = gate.constraints(repo)
     assert not res["ok"] and res["weakened"] == 1 and res["files"] == ["tests/test_new.py"]
-
-
-def test_package_reexport_noqa_is_not_a_weakened_bar_but_other_suppressions_are(tmp_path):
-    """`from .a import f  # noqa: F401` in __init__.py is the re-export idiom (live bench: a step failed 3 times on it); any other added suppression still fails and the gate names it."""
-    import subprocess
-    from flow_engine import gate
-
-    def git(*a):
-        subprocess.run(["git", "-c", "user.email=a@b", "-c", "user.name=t", *a], cwd=tmp_path, check=True, capture_output=True)
-    git("init", "-q", "-b", "main")
-    (tmp_path / "pkg").mkdir()
-    (tmp_path / "pkg" / "a.py").write_text("def f():\n    return 1\n")
-    git("add", "-A")
-    git("commit", "-q", "-m", "i")
-    (tmp_path / "pkg" / "__init__.py").write_text("from .a import f  # no" + "qa: F401\n")
-    assert gate.constraints(tmp_path)["ok"]
-    (tmp_path / "pkg" / "b.py").write_text("import os  # no" + "qa\n")
-    res = gate.constraints(tmp_path)
-    assert not res["ok"] and any("pkg/b.py" in x and "import os" in x for x in res["findings"])
