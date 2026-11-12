@@ -26,8 +26,8 @@ cache = {}  # sha256 key -> answer text
 _lock = threading.Lock()
 
 
-def _fail(msg, name, transient=False):
-    return agents.Result(False, error=msg[:400], transient=transient, backend=name)
+def _fail(msg, name, transient=False, retry_after=0.0):
+    return agents.Result(False, error=msg[:400], transient=transient, backend=name, retry_after=retry_after)
 
 
 def git_env():
@@ -93,9 +93,11 @@ def run_api(model, prompt, o):
     # ponytail: in-process only, and replaying a stored answer is safe only for an identical prompt on an identical tree (HEAD is the tree here)
     ckey = _cache_key(o.workdir, model, prompt) if os.environ.get("FLOW_API_CACHE") == "1" else None
     started = time.monotonic()
-    if ckey and ckey in cache:
+    with _lock:
+        hit = cache.get(ckey) if ckey else None
+    if hit is not None:
         _log(o, provider, model, {}, 0.0, started, "cache_hit")
-        return agents.Result(True, cache[ckey], 0.0, {"cache_hit": 1}, backend=name)
+        return agents.Result(True, hit, 0.0, {"cache_hit": 1}, backend=name)
     if not _breaker_allows(provider):
         return _fail("breaker open", name, transient=True)
     base = os.environ.get("FLOW_API_BASE_URL") or DEFAULT_BASE[provider]
@@ -104,9 +106,10 @@ def run_api(model, prompt, o):
     try:
         out = send(base, key, mid, "", prompt, max_tokens, o.timeout)
     except apiclient.ApiError as e:
-        _breaker_failed(provider)
+        if e.transient:  # a 400/401/404 says nothing about the endpoint's health: only transient failures open the breaker
+            _breaker_failed(provider)  # also re-arms the cool-down when this was the half-open probe
         _log(o, provider, model, {}, 0.0, started, "transient" if e.transient else "error")
-        return _fail(str(e), name, transient=e.transient)
+        return _fail(str(e), name, transient=e.transient, retry_after=float(e.retry_after or 0.0))
     except (KeyError, IndexError, TypeError, AttributeError):
         _log(o, provider, model, {}, 0.0, started, "malformed")
         return _fail("malformed API response", name)
@@ -121,5 +124,6 @@ def run_api(model, prompt, o):
         cost = 0.0
         tokens["cost_unknown"] = 1  # flagged in the ledger: an unpriced call is never a silent zero
     if ckey:
-        cache[ckey] = out["text"]
+        with _lock:
+            cache[ckey] = out["text"]
     return agents.Result(True, out["text"], cost, tokens, backend=name)
