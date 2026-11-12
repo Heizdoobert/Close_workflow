@@ -34,7 +34,7 @@ def server(monkeypatch):
 
 def chain(spec, workdir, tools=agents.READ_TOOLS, trace=None):
     trace = [] if trace is None else trace
-    return agents.call([spec], "say hi", agents.Opts(str(workdir), tools=tools), trace, sleep=lambda s: None)
+    return agents.call([spec], "say hi", agents.Opts(str(workdir), tools=tools, prompt_only=True), trace, sleep=lambda s: None)
 
 
 def git(path, *a):
@@ -105,7 +105,7 @@ def test_write_tools_refused_loudly_never_answered_as_edited(server, tmp_path):
 
 
 def test_breaker_opens_after_five_failures_then_probes_once_after_cool_down(server, tmp_path):
-    o = agents.Opts(str(tmp_path))
+    o = agents.Opts(str(tmp_path), prompt_only=True)
     for _ in range(api.BREAKER_LIMIT):
         server.fail_next = 500
         res = api.run_api("anthropic/claude-haiku", "say hi", o)
@@ -122,7 +122,7 @@ def test_breaker_opens_after_five_failures_then_probes_once_after_cool_down(serv
 
 
 def test_breaker_is_per_provider(server, tmp_path):
-    o = agents.Opts(str(tmp_path))
+    o = agents.Opts(str(tmp_path), prompt_only=True)
     api.breaker["anthropic"] = api.BREAKER_LIMIT
     api.breaker_at["anthropic"] = time.time()
     assert api.run_api("openai/example-model", "say hi", o).ok
@@ -147,7 +147,7 @@ def test_cache_is_off_by_default(server, tmp_path):
     repo = git_repo(tmp_path / "wt")
     assert chain(ANTHROPIC, repo)[0].ok
     server.fail_next = 500
-    res = api.run_api("anthropic/claude-haiku", "say hi", agents.Opts(str(repo)))
+    res = api.run_api("anthropic/claude-haiku", "say hi", agents.Opts(str(repo), prompt_only=True))
     assert not res.ok and res.error == "HTTP 500 Internal Server Error"
 
 
@@ -189,32 +189,32 @@ def test_anthropic_truncated_answer_fails_and_is_not_cached(server, tmp_path, mo
     monkeypatch.setenv("FLOW_API_CACHE", "1")
     repo = git_repo(tmp_path / "wt")
     canned(monkeypatch, {"content": [{"type": "text", "text": "half a sen"}], "stop_reason": "max_tokens", "usage": {}})
-    res = api.run_api(ANTHROPIC_MODEL, "say hi", agents.Opts(str(repo)))
+    res = api.run_api(ANTHROPIC_MODEL, "say hi", agents.Opts(str(repo), prompt_only=True))
     assert not res.ok and res.error == "empty or truncated answer" and res.transient is False
     assert api.cache == {}
 
 
 def test_openai_truncated_answer_fails(server, tmp_path, monkeypatch):
     canned(monkeypatch, {"choices": [{"message": {"content": "half"}, "finish_reason": "length"}], "usage": {}})
-    res = api.run_api(OPENAI_MODEL, "say hi", agents.Opts(str(tmp_path)))
+    res = api.run_api(OPENAI_MODEL, "say hi", agents.Opts(str(tmp_path), prompt_only=True))
     assert not res.ok and res.error == "empty or truncated answer" and res.transient is False
 
 
 def test_empty_answer_fails_the_same_way(server, tmp_path, monkeypatch):
     canned(monkeypatch, {"content": [{"type": "text", "text": "   "}], "stop_reason": "end_turn", "usage": {}})
-    res = api.run_api(ANTHROPIC_MODEL, "say hi", agents.Opts(str(tmp_path)))
+    res = api.run_api(ANTHROPIC_MODEL, "say hi", agents.Opts(str(tmp_path), prompt_only=True))
     assert not res.ok and res.error == "empty or truncated answer" and res.transient is False
 
 
 def test_200_body_without_content_is_malformed_and_permanent(server, tmp_path, monkeypatch):
     canned(monkeypatch, {"usage": {"input_tokens": 1}})
-    res = api.run_api(ANTHROPIC_MODEL, "say hi", agents.Opts(str(tmp_path)))
+    res = api.run_api(ANTHROPIC_MODEL, "say hi", agents.Opts(str(tmp_path), prompt_only=True))
     assert not res.ok and res.error == "malformed API response" and res.transient is False
 
 
 def test_200_openai_body_without_choices_is_malformed(server, tmp_path, monkeypatch):
     canned(monkeypatch, {"usage": {"prompt_tokens": 1}})
-    res = api.run_api(OPENAI_MODEL, "say hi", agents.Opts(str(tmp_path)))
+    res = api.run_api(OPENAI_MODEL, "say hi", agents.Opts(str(tmp_path), prompt_only=True))
     assert not res.ok and res.error == "malformed API response" and res.transient is False
 
 
@@ -227,7 +227,7 @@ def test_timeout_reaches_urllib(server, tmp_path, monkeypatch):
         return real_open(self, fullurl, data, timeout)
 
     monkeypatch.setattr(urllib.request.OpenerDirector, "open", recording_open)
-    res = api.run_api(ANTHROPIC_MODEL, "say hi", agents.Opts(str(tmp_path), timeout=7))
+    res = api.run_api(ANTHROPIC_MODEL, "say hi", agents.Opts(str(tmp_path), timeout=7, prompt_only=True))
     assert res.ok and seen == [7]
 
 
@@ -241,7 +241,7 @@ def test_malformed_price_sends_no_request(server, tmp_path, monkeypatch):
         return real_request(*a, **kw)
 
     monkeypatch.setattr(apiclient, "request", counting_request)
-    res = api.run_api(OPENAI_MODEL, "say hi", agents.Opts(str(tmp_path)))
+    res = api.run_api(OPENAI_MODEL, "say hi", agents.Opts(str(tmp_path), prompt_only=True))
     assert not res.ok and res.error.startswith("invalid argument:") and res.transient is False
     assert sent == [] and server.last_path is None
 

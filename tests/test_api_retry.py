@@ -38,7 +38,7 @@ def server(monkeypatch):
 
 
 def call_with_sleep(spec, workdir, sleeps):
-    return agents.call([spec], "say hi", agents.Opts(str(workdir)), [], sleep=sleeps.append)
+    return agents.call([spec], "say hi", agents.Opts(str(workdir), prompt_only=True), [], sleep=sleeps.append)
 
 
 def test_429_retry_after_is_the_delay_then_success(server, tmp_path):
@@ -70,7 +70,7 @@ def test_retry_after_longer_than_the_ceiling_is_capped(server, tmp_path, monkeyp
 
 
 def test_five_400_answers_do_not_open_the_breaker(server, tmp_path):
-    o = agents.Opts(str(tmp_path))
+    o = agents.Opts(str(tmp_path), prompt_only=True)
     for _ in range(api.BREAKER_LIMIT):
         server.fail_next = 400
         res = api.run_api(ANTHROPIC_MODEL, "say hi", o)
@@ -81,7 +81,7 @@ def test_five_400_answers_do_not_open_the_breaker(server, tmp_path):
 
 
 def test_five_503_answers_open_the_breaker(server, tmp_path):
-    o = agents.Opts(str(tmp_path))
+    o = agents.Opts(str(tmp_path), prompt_only=True)
     for _ in range(api.BREAKER_LIMIT):
         server.fail_next = 503
         res = api.run_api(ANTHROPIC_MODEL, "say hi", o)
@@ -93,7 +93,7 @@ def test_five_503_answers_open_the_breaker(server, tmp_path):
 
 
 def test_failed_half_open_probe_reopens_for_a_full_cool_down(server, tmp_path):
-    o = agents.Opts(str(tmp_path))
+    o = agents.Opts(str(tmp_path), prompt_only=True)
     api.breaker["anthropic"] = api.BREAKER_LIMIT
     api.breaker_at["anthropic"] = time.time() - api.BREAKER_COOL - 1  # cool-down over: the next request is the probe
     before = time.time()
@@ -108,7 +108,7 @@ def test_failed_half_open_probe_reopens_for_a_full_cool_down(server, tmp_path):
 
 
 def test_failed_probe_with_a_permanent_answer_also_reopens(server, tmp_path):
-    o = agents.Opts(str(tmp_path))
+    o = agents.Opts(str(tmp_path), prompt_only=True)
     api.breaker["anthropic"] = api.BREAKER_LIMIT
     api.breaker_at["anthropic"] = time.time() - api.BREAKER_COOL - 1
     before = time.time()

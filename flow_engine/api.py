@@ -3,7 +3,8 @@
 A chain entry "api:<provider>/<model>" (e.g. "api:anthropic/claude-haiku", "api:openai/gpt-4o") lands here via agents.BACKENDS.
 Keys come from the environment only (ANTHROPIC_API_KEY, OPENAI_API_KEY): they are never stored, logged or put in an error string.
 FLOW_API_BASE_URL overrides the endpoint for both providers (fake server, vLLM, an OpenAI-compatible gateway).
-No tool loop yet: a call that asks for write tools is refused; a read-only call is answered as a plain completion.
+No tool loop yet: only calls with o.prompt_only are served (review, SHIP personas, interview round); any other call is refused.
+A prompt-only call that asks for write tools is refused too.
 """
 
 import hashlib
@@ -88,6 +89,8 @@ def _log(o, provider, model, usage, cost, started, status):
 def run_api(model, prompt, o):
     provider, _, mid = (model or "").partition("/")
     name = f"api:{model}"
+    if not o.prompt_only:  # no tool loop: a role that reads the repo would get a plain completion with no repo access
+        return _fail("invalid argument: api backend only serves prompt-only calls", name)
     if provider not in DEFAULT_BASE:
         return _fail(f"invalid argument: unknown provider {provider}", name)
     if not mid:
