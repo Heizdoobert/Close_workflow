@@ -1,6 +1,6 @@
 """Sub-agent backends (claude, agy, opencode) behind one call with retry, backoff and fallback.
 
-A backend spec is "claude:haiku", "claude:sonnet", "agy[:model-id]" or "opencode[:provider/model]".
+A backend spec is "claude:haiku", "claude:sonnet", "agy[:model-id]", "opencode[:provider/model]" or "api:<provider>/<model>" (HTTP, see api.py).
 Suffix "!" pins the model: persistent retries, resume of the same conversation, and NEVER a fallback to another model.
 Suffix "+" prefers the model with persistent retries, then (only if it truly cannot be called) the next spec runs.
 Transient failures (503/529/429/timeouts/connection resets) are retried with exponential backoff;
@@ -342,7 +342,12 @@ def run_opencode(model, prompt, o):
     return Result(True, "".join(texts).strip(), cost, tok, backend="opencode")
 
 
-BACKENDS = {"claude": run_claude, "agy": run_agy, "opencode": run_opencode}
+def run_api(model, prompt, o):
+    from flow_engine import api  # lazy: api.py imports Result from this module
+    return api.run_api(model, prompt, o)
+
+
+BACKENDS = {"claude": run_claude, "agy": run_agy, "opencode": run_opencode, "api": run_api}
 
 
 def policy_chain(parent_model, role="code"):
