@@ -5,11 +5,15 @@ the status and reason phrase or the exception class name, never the response bod
 the request headers or the key, so no secret can leak through an error string.
 """
 
+import http.client
 import json
+import os
 import urllib.error
+import urllib.parse
 import urllib.request
 
 ANTHROPIC_VERSION = "2023-06-01"
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 
 
 class ApiError(Exception):
@@ -30,13 +34,34 @@ def _retry_after(headers):
         return None
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _scheme_allowed(url):
+    try:
+        parts = urllib.parse.urlsplit(url)
+        return parts.scheme == "https" or (parts.scheme == "http" and parts.hostname in LOCAL_HOSTS)
+    except ValueError:
+        return False
+
+
 def request(url, headers, body, timeout):
+    if not _scheme_allowed(url):
+        raise ApiError("invalid argument: api base url must be https", transient=False)
+    limit = int(os.environ.get("FLOW_API_MAX_BYTES", "4000000"))
     data = json.dumps(body).encode("utf-8")
     all_headers = {**headers, "content-type": "application/json"}
     req = urllib.request.Request(url, data=data, headers=all_headers, method="POST")
+    opener = urllib.request.build_opener(NoRedirect)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read()
+        with opener.open(req, timeout=timeout) as resp:
+            raw = resp.read(limit + 1)
+            if len(raw) > limit:
+                raise ApiError("invalid argument: response over FLOW_API_MAX_BYTES", transient=False)
+            if resp.length:
+                raise http.client.IncompleteRead(raw)
     except urllib.error.HTTPError as e:
         status, reason = e.code, e.reason
         retry_after = _retry_after(e.headers)
@@ -44,6 +69,8 @@ def request(url, headers, body, timeout):
         transient = status == 429 or status >= 500
         raise ApiError(f"HTTP {status} {reason}", status=status, transient=transient, retry_after=retry_after) from None
     except (urllib.error.URLError, OSError) as e:
+        raise ApiError(type(e).__name__, transient=True) from None
+    except http.client.HTTPException as e:
         raise ApiError(type(e).__name__, transient=True) from None
     try:
         parsed = json.loads(raw)
