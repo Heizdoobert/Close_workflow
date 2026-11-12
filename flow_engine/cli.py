@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import sys
 
-from flow_engine import __version__, agents, bridge, engine, gate, interview, plan, sandbox, selftest
+from flow_engine import __version__, agents, bridge, doctor_api, engine, gate, interview, plan, sandbox, selftest
 from flow_engine.resp import RedisError
 
 USAGE = ('usage: flow-task "<task message>"      store a task (with FLOW_EXEC=1 also run it)\n'
@@ -73,6 +73,8 @@ def doctor():
     checks = doctor_checks()
     for name, ok, detail, req in checks:
         print(f"{'OK  ' if ok else ('FAIL' if req else 'warn')}  {name:<13} {detail}")
+    for line in doctor_api.report():
+        print(line)
     return 0 if all(ok for _, ok, _, req in checks if req) else 1
 
 
