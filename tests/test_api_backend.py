@@ -7,7 +7,9 @@ import time
 import pytest
 
 import fake_api
-from flow_engine import agents, api
+import urllib.request
+
+from flow_engine import agents, api, apiclient
 
 KEY = "sk-planted-SECRET-do-not-leak"
 ANTHROPIC = "api:anthropic/claude-haiku"
@@ -172,6 +174,76 @@ def test_planted_key_appears_in_no_result_or_trace(server, tmp_path):
     res, _, _ = chain(ANTHROPIC, tmp_path, trace=trace)
     assert not res.ok
     assert KEY not in json.dumps([res.error, res.text, res.backend, res.tokens, trace])
+
+
+ANTHROPIC_MODEL = "anthropic/claude-haiku"
+OPENAI_MODEL = "openai/example-model"
+
+
+def canned(monkeypatch, body):
+    """Make apiclient.request return body as the 200 answer; the real anthropic_call / openai_call still parse it."""
+    monkeypatch.setattr(apiclient, "request", lambda url, headers, payload, timeout: body)
+
+
+def test_anthropic_truncated_answer_fails_and_is_not_cached(server, tmp_path, monkeypatch):
+    monkeypatch.setenv("FLOW_API_CACHE", "1")
+    repo = git_repo(tmp_path / "wt")
+    canned(monkeypatch, {"content": [{"type": "text", "text": "half a sen"}], "stop_reason": "max_tokens", "usage": {}})
+    res = api.run_api(ANTHROPIC_MODEL, "say hi", agents.Opts(str(repo)))
+    assert not res.ok and res.error == "empty or truncated answer" and res.transient is False
+    assert api.cache == {}
+
+
+def test_openai_truncated_answer_fails(server, tmp_path, monkeypatch):
+    canned(monkeypatch, {"choices": [{"message": {"content": "half"}, "finish_reason": "length"}], "usage": {}})
+    res = api.run_api(OPENAI_MODEL, "say hi", agents.Opts(str(tmp_path)))
+    assert not res.ok and res.error == "empty or truncated answer" and res.transient is False
+
+
+def test_empty_answer_fails_the_same_way(server, tmp_path, monkeypatch):
+    canned(monkeypatch, {"content": [{"type": "text", "text": "   "}], "stop_reason": "end_turn", "usage": {}})
+    res = api.run_api(ANTHROPIC_MODEL, "say hi", agents.Opts(str(tmp_path)))
+    assert not res.ok and res.error == "empty or truncated answer" and res.transient is False
+
+
+def test_200_body_without_content_is_malformed_and_permanent(server, tmp_path, monkeypatch):
+    canned(monkeypatch, {"usage": {"input_tokens": 1}})
+    res = api.run_api(ANTHROPIC_MODEL, "say hi", agents.Opts(str(tmp_path)))
+    assert not res.ok and res.error == "malformed API response" and res.transient is False
+
+
+def test_200_openai_body_without_choices_is_malformed(server, tmp_path, monkeypatch):
+    canned(monkeypatch, {"usage": {"prompt_tokens": 1}})
+    res = api.run_api(OPENAI_MODEL, "say hi", agents.Opts(str(tmp_path)))
+    assert not res.ok and res.error == "malformed API response" and res.transient is False
+
+
+def test_timeout_reaches_urllib(server, tmp_path, monkeypatch):
+    seen = []
+    real_open = urllib.request.OpenerDirector.open
+
+    def recording_open(self, fullurl, data=None, timeout=None):
+        seen.append(timeout)
+        return real_open(self, fullurl, data, timeout)
+
+    monkeypatch.setattr(urllib.request.OpenerDirector, "open", recording_open)
+    res = api.run_api(ANTHROPIC_MODEL, "say hi", agents.Opts(str(tmp_path), timeout=7))
+    assert res.ok and seen == [7]
+
+
+def test_malformed_price_sends_no_request(server, tmp_path, monkeypatch):
+    monkeypatch.setenv("FLOW_PRICE_OPENAI_EXAMPLE_MODEL", "1,abc,1.25,5")
+    sent = []
+    real_request = apiclient.request
+
+    def counting_request(*a, **kw):
+        sent.append(a[0])
+        return real_request(*a, **kw)
+
+    monkeypatch.setattr(apiclient, "request", counting_request)
+    res = api.run_api(OPENAI_MODEL, "say hi", agents.Opts(str(tmp_path)))
+    assert not res.ok and res.error.startswith("invalid argument:") and res.transient is False
+    assert sent == [] and server.last_path is None
 
 
 def test_planted_key_absent_when_transport_fails(tmp_path, monkeypatch):

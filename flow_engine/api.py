@@ -111,6 +111,9 @@ def run_api(model, prompt, o):
         _log(o, provider, model, {}, 0.0, started, "malformed")
         return _fail("malformed API response", name)
     _breaker_ok(provider)
+    if out["truncated"] or not out["text"].strip():
+        _log(o, provider, model, out["usage"], 0.0, started, "truncated" if out["truncated"] else "empty")
+        return _fail("empty or truncated answer", name)  # not transient, not cached
     tokens = dict(out["usage"])
     cost = apiprice.cost_of(model, tokens)
     _log(o, provider, model, tokens, cost, started, "ok")

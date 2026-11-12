@@ -87,7 +87,7 @@ def anthropic_call(base, key, model, system, user, max_tokens, timeout):
     if system:
         body["system"] = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
     resp = request(base.rstrip("/") + "/v1/messages", headers, body, timeout)
-    text = "".join(b.get("text", "") for b in resp.get("content", []) if b.get("type") == "text")
+    text = "".join(b.get("text", "") for b in resp["content"] if b.get("type") == "text")
     u = resp.get("usage") or {}
     usage = {
         "input_tokens": u.get("input_tokens", 0),
@@ -96,7 +96,7 @@ def anthropic_call(base, key, model, system, user, max_tokens, timeout):
         "output_tokens": u.get("output_tokens", 0),
         "thinking": 0,
     }
-    return {"text": text, "usage": usage}
+    return {"text": text, "usage": usage, "truncated": resp.get("stop_reason") == "max_tokens"}
 
 
 def openai_call(base, key, model, system, user, max_tokens, timeout):
@@ -107,7 +107,9 @@ def openai_call(base, key, model, system, user, max_tokens, timeout):
     messages.append({"role": "user", "content": user})
     body = {"model": model, "max_tokens": max_tokens, "messages": messages}
     resp = request(base.rstrip("/") + "/v1/chat/completions", headers, body, timeout)
-    text = (resp["choices"][0]["message"].get("content") or "") if resp.get("choices") else ""
+    choice = resp["choices"][0]
+    text = choice["message"].get("content") or ""
+    finish_reason = choice.get("finish_reason")
     u = resp.get("usage") or {}
     cached = (u.get("prompt_tokens_details") or {}).get("cached_tokens", 0) or 0
     usage = {
@@ -117,4 +119,4 @@ def openai_call(base, key, model, system, user, max_tokens, timeout):
         "output_tokens": u.get("completion_tokens", 0),
         "thinking": 0,
     }
-    return {"text": text, "usage": usage}
+    return {"text": text, "usage": usage, "truncated": finish_reason == "length"}
