@@ -83,7 +83,10 @@ def request(url, headers, body, timeout):
 
 def anthropic_call(base, key, model, system, user, max_tokens, timeout):
     headers = {"x-api-key": key, "anthropic-version": ANTHROPIC_VERSION}
-    body = {"model": model, "max_tokens": max_tokens, "messages": [{"role": "user", "content": user}]}
+    content = user
+    if len(user) >= int(os.environ.get("FLOW_API_CACHE_MIN_CHARS", "4000")):  # cache_control only pays off on a long prompt
+        content = [{"type": "text", "text": user, "cache_control": {"type": "ephemeral"}}]
+    body = {"model": model, "max_tokens": max_tokens, "messages": [{"role": "user", "content": content}]}
     if system:
         body["system"] = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
     resp = request(base.rstrip("/") + "/v1/messages", headers, body, timeout)
