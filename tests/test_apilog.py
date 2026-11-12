@@ -12,7 +12,7 @@ from flow_engine import agents, api, apilog, engine
 KEY = "sk-planted-SECRET-do-not-leak"
 MODEL = "anthropic/claude-haiku"
 USAGE = {"input_tokens": 12, "output_tokens": 5, "cache_read": 4, "cache_create": 3, "thinking": 0}
-EXPECTED = {"ts", "event", "role", "backend", "model", "input_tokens", "output_tokens", "cache_read", "cache_create", "cost", "latency_ms", "status"}
+EXPECTED = {"ts", "event", "role", "backend", "model", "input_tokens", "output_tokens", "cache_read", "cache_create", "cost_usd", "duration_ms", "status"}
 
 
 @pytest.fixture
@@ -47,12 +47,12 @@ def test_line_is_one_json_object_with_the_expected_keys():
     assert set(rec) == EXPECTED
     assert rec["role"] == "planner" and rec["backend"] == "api:anthropic" and rec["model"] == MODEL
     assert (rec["input_tokens"], rec["output_tokens"], rec["cache_read"], rec["cache_create"]) == (12, 5, 4, 3)
-    assert rec["cost"] == 0.5 and rec["latency_ms"] == 120 and rec["status"] == "ok"
+    assert rec["cost_usd"] == 0.5 and rec["duration_ms"] == 120 and rec["status"] == "ok"
 
 
 def test_unknown_cost_is_null_not_zero():
     rec = json.loads(apilog.line("review", "api:openai", "openai/x", {}, None, 5, "ok"))
-    assert rec["cost"] is None
+    assert rec["cost_usd"] is None
 
 
 def test_missing_usage_counts_are_zero():
@@ -79,8 +79,8 @@ def test_run_api_writes_one_line_per_request_and_no_key(server, log_file, tmp_pa
     assert [x["status"] for x in lines] == ["ok", "transient"]
     assert all(x["event"] == "api" and x["role"] == "planner" and x["backend"] == "api:anthropic" for x in lines)
     assert (lines[0]["input_tokens"], lines[0]["cache_read"], lines[0]["cache_create"], lines[0]["output_tokens"]) == (12, 4, 3, 5)
-    assert lines[0]["cost"] == pytest.approx(ok.cost) and lines[0]["cost"] > 0
-    assert lines[1]["cost"] == 0.0
+    assert lines[0]["cost_usd"] == pytest.approx(ok.cost) and lines[0]["cost_usd"] > 0
+    assert lines[1]["cost_usd"] == 0.0
     text = log_file.read_text(encoding="utf-8")
     assert KEY not in text
     assert "sk-" not in text
@@ -92,7 +92,7 @@ def test_run_api_logs_unpriced_model_as_null_cost(server, log_file, monkeypatch,
     o = SimpleNamespace(workdir=str(tmp_path), tools=agents.READ_TOOLS, timeout=30, prompt_only=True, role="")
     res = api.run_api(MODEL, "p", o)
     assert res.ok and "cost_unknown" not in res.tokens
-    assert _lines(log_file)[0]["cost"] is None
+    assert _lines(log_file)[0]["cost_usd"] is None
 
 
 def test_cache_hit_is_logged_with_zero_cost(server, log_file, monkeypatch, tmp_path):
@@ -106,5 +106,5 @@ def test_cache_hit_is_logged_with_zero_cost(server, log_file, monkeypatch, tmp_p
     assert first.ok and second.ok and second.tokens == {"cache_hit": 1}
     lines = _lines(log_file)
     assert [x["status"] for x in lines] == ["ok", "cache_hit"]
-    assert lines[1]["cost"] == 0.0 and lines[1]["input_tokens"] == 0
+    assert lines[1]["cost_usd"] == 0.0 and lines[1]["input_tokens"] == 0
     assert KEY not in log_file.read_text(encoding="utf-8")

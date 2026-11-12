@@ -114,5 +114,9 @@ Commands you will use: `flow-task where` (state and next action), `show <plan>`,
 - CLI mode stays the default. A chain entry `api:anthropic/<model>` or `api:openai/<model>` uses an API key instead of a CLI login.
 - Env vars (set the value yourself, never paste a key into a file or a task): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `FLOW_API_BASE_URL` (optional endpoint override), `FLOW_PRICE_<MODEL>` (your own price per million tokens; without it the cost is unknown, never 0), `FLOW_POLICY_API_<ROLE>` (optional extra rung), `FLOW_API_CACHE=1` (retry cache, off by default).
 - A missing key means the chain falls through to the next backend; it is not an error that stops the plan.
-- **Limit:** API mode serves only roles that need no tools (planner, interview, review, SHIP personas). map, steps and scout stay on CLI, and a call that asks for write tools is refused. Read-only map and scout calls are not yet refused at the chain level: they would get a plain completion with no tools, so keep them on CLI. The tool loop does not exist yet.
+- **Limit:** the tool loop does not exist yet. API mode serves only calls that set `prompt_only`: the review pass, the three SHIP personas and the interview round. Planner, map, scout and steps stay on CLI, and a call outside those roles is refused with 'invalid argument: api backend only serves prompt-only calls'.
+- `https` is required for `FLOW_API_BASE_URL` except for localhost, 127.0.0.1 and ::1. Redirects are refused, so the key is never re-sent to another host.
+- `FLOW_API_MAX_BYTES` caps the response body (default 4000000); a larger body is a permanent error.
+- `FLOW_API_CACHE_MIN_CHARS` (default 4000): a longer prompt is sent with Anthropic `cache_control`. The saving is not measured.
+- Tokens are the unit of cost. `FLOW_PLAN_MAX_TOKENS` sets a per-plan billable-token budget (0 = off); `FLOW_BUDGET_CACHE_READ=1` counts cache reads; `FLOW_TOKEN_CHARS` is the rough chars-per-token estimate (not exact). USD is optional through `FLOW_PRICE_<MODEL>`. The plan report has a `## Token tổng` section.
 - `flow-task doctor` shows which modes are usable without printing a key.
