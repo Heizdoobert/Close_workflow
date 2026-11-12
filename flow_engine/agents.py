@@ -371,6 +371,9 @@ def chain_from_env(default="claude:haiku", parent_model=None, role="code"):
     for s in chain or [default]:
         if s not in out:
             out.append(s)
+    api_rung = os.environ.get(f"FLOW_POLICY_API_{role.upper()}")  # optional last rung per role; unset = no change
+    if api_rung and api_rung.strip() not in out:
+        out.append(api_rung.strip())
     return out
 
 
