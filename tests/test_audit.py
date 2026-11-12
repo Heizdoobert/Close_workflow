@@ -84,6 +84,14 @@ def test_a_test_without_an_assertion_is_hard_but_raises_counts(tmp_path):
     assert len(res) == 1 and "test_m.py:4" in res[0]
 
 
+def test_a_test_file_wrapped_in_a_docstring_defines_no_test(tmp_path):
+    wrapped = '"""Test the evaluator.\n\ndef test_a():\n    assert f() == 1\n"""\n'
+    assert any("defines no test" in h for h in _verify(tmp_path, "tests/test_m.py", wrapped)["hard"])
+    assert _verify(tmp_path, "tests/test_ok.py", "def test_a():\n    assert f() == 1\n")["hard"] == []
+    assert _verify(tmp_path, "tests/test_cls.py", "class TestA:\n    def test_a(self):\n        assert f()\n")["hard"] == []
+    assert _verify(tmp_path, "tests/conftest.py", "import pytest\n\n\n@pytest.fixture\ndef x():\n    return 1\n")["hard"] == []  # helper files hold no tests
+
+
 def test_soft_slop_is_reported(tmp_path):
     src = "import os\nimport sys\n\n# TO" + "DO later\n# def old():\n#     return 1\nprint(sys.argv)\n"
     soft = _verify(tmp_path, "m.py", src)["soft"]
@@ -96,6 +104,27 @@ def test_declared_files_must_exist_and_hold_code(tmp_path):
     (tmp_path / "blank.txt").write_text("")
     res = audit.verify(str(tmp_path), [], {"missing.py", "empty.py", "blank.txt", "gone.py"}, {"gone.py"})["hard"]
     assert sorted(h.split(" ")[0] for h in res) == ["blank.txt", "empty.py", "missing.py"]
+
+
+def test_doc_claims_must_match_the_tree(tmp_path):
+    _git(tmp_path, "init", "-q", "-b", "main")
+    (tmp_path / "requirements.txt").write_text("airtest==1.3.6\nmcp==1.28.0\n")
+    (tmp_path / "a.py").write_text("x = 1\ny = 2\n")
+    doc = ["`a.py:2` is real, `a.py:9` is past the end, `gone.py:1` is missing", "Pinned: airtest==1.3.6 and Mcp==1.28.0, but airtest==1.2.3 is invented", "see http://x.io/a.py:80 and v1.2.3"]
+    res = audit.claims(str(tmp_path), [("docs/r.md", i, t) for i, t in enumerate(doc, 1)])
+    assert sorted(h.split(" ", 1)[1] for h in res) == ["cites a.py:9 but the file has 2 lines", "cites gone.py:1 but that file does not exist", "claims pin airtest==1.2.3 but no manifest in the tree has it"]
+    assert audit.claims(str(tmp_path), [("a.py", 1, "airtest==9.9 gone.py:1")]) == []  # only Markdown is read
+
+
+def test_a_step_that_writes_an_invented_pin_is_sent_back(tmp_path):
+    _git(tmp_path, "init", "-q", "-b", "main")
+    (tmp_path / "requirements.txt").write_text("airtest==1.3.6\n")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "i")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "r.md").write_text("## Deps\nAll pinned, e.g. airtest==1.2.3\n")
+    g = gate.run_gates(tmp_path, allowed=["docs/r.md"])
+    assert not g["ok"] and "airtest==1.2.3" in g["gates"]["code_verify"]["findings"][0]
 
 
 # --- as gates in a plan step -----------------------------------------------------------------------------------------

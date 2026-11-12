@@ -30,6 +30,14 @@ def repo(tmp_path, monkeypatch):
     return root
 
 
+def test_redact_shapes_masks_key_formats_but_leaves_ordinary_code():
+    code = f'token = self.next_token()\npassword = get_password()\nkey = "{CANARY_AWS}"\nother = "{CANARY_SK}"\n'
+    out = secrets.redact_shapes(code)
+    assert CANARY_AWS not in out and CANARY_SK not in out and out.count("[REDACTED]") == 2
+    assert "token = self.next_token()" in out and "password = get_password()" in out
+    assert "[REDACTED]" in secrets.redact("token = self.next_token()")  # why a reviewer's diff gets the shapes only
+
+
 def test_planted_key_in_untracked_file_fails_the_secrets_gate(repo):
     (repo / "config.py").write_text(f"API = '{CANARY_SK}'\n")
     res = gate.run_gates(str(repo))
@@ -93,3 +101,22 @@ def test_secret_redaction_still_reachable_from_plan_module():
     assert plan.redact is secrets.redact
     assert plan.SECRET_PATTERNS is secrets.SECRET_PATTERNS
     assert "[REDACTED]" in plan.redact("token=" + "abcdefghijklmnop")
+
+
+def test_redacting_state_never_breaks_the_json():
+    """A scout quote such as `f"Unexpected token: {tok}"` matches the assigned-secret rule; masking the serialised text ate a closing quote and left state.json unparsable (live bench, 2026-11-12)."""
+    import json
+    from flow_engine import secrets
+    state = {"scout": {"facts": [{"quote": 'raise ValueError(f"Unexpected token: {tok}")', "note": "x"}]}, "k": 'password = "hunter2hunter2"'}
+    assert not _parses(secrets.redact(json.dumps(state, indent=2)))  # the old way: the mask swallows the closing quote
+    out = json.loads(json.dumps(secrets.redact_obj(state), indent=2))
+    assert "hunter2" not in json.dumps(out) and "[REDACTED]" in json.dumps(out)
+
+
+def _parses(text):
+    import json
+    try:
+        json.loads(text)
+        return True
+    except ValueError:
+        return False

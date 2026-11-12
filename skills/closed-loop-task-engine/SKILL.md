@@ -17,6 +17,6 @@ Skip this flow for tiny work (typo, rename, a question): do it directly.
 6. **Final review**: give the user `plans/<id>/report.md` per step as Việc làm / File / Lý do / Bằng chứng, plus the result branch `flow/<id>`. A failed step: show its evidence and the uncommitted files. Never merge into the user's branch unless asked. Show the `Độ phủ 16 bước` table and the `Quyết định SHIP` section as they are (NO-GO stays NO-GO until the blockers are fixed or the user accepts the risk): rows marked MỘT PHẦN are the model's own statement (root cause, approach, fix, spec; the interview confidence; security hardening covers only dangerous code patterns), THIẾU means that step did not run. Do not rewrite them as done.
 7. **Learn**: after a failure's root cause is found, `agent_memory_recipe_record`.
 
-Model rule: if your model is GPT-OSS 120B the sub-agents stay on GPT-OSS 120B (pinned, never another model). If it is Gemini Flash, they try GPT-OSS 120B first, then lighter. FLOW_SKILL does this from the `model` you pass.
+Model rule: if your model is GPT-OSS 120B the sub-agents stay on GPT-OSS 120B (pinned, never another model). If it is Gemini Flash: code steps try GPT-OSS 120B first, then Gemini; planning, non-code steps, review and SHIP stay on Gemini. FLOW_SKILL does this from the `model` you pass.
 
 Logs: `<FLOW_SKILL repo>/logs/` -> Loki -> Grafana `http://localhost:3000` (`{job="flow"}`).

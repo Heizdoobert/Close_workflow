@@ -156,6 +156,28 @@ def test_gpt_oss_parent_runs_the_whole_plan_on_that_model_only(env, monkeypatch)
     assert OSS in rep and "same conversation" in rep
 
 
+def test_gemini_parent_only_plans_and_decides_every_hands_on_call_runs_on_gpt_oss(env, monkeypatch):
+    gem = "gemini-3.8-flash-high"
+    monkeypatch.setenv("FAKE_SCOUT", json.dumps({"facts": [{"file": "a.py", "line": 9, "quote": "value = 1", "note": "the constant"},
+                                                           {"file": "a.py", "line": 1, "quote": "value = 2", "note": "not in the file"},
+                                                           {"file": "../../etc/passwd", "line": 1, "quote": "root", "note": "outside the worktree"}]}))
+    env.script([step("s1", files=["a.py"], acc="test -f a.py"), {**step("s2", deps=["s1"], files=["notes.md"], acc="test -f notes.md"), "kind": "general"}],
+               {"s1": {"files": {"a.py": "value = 1\n"}}, "s2": {"files": {"notes.md": "n\n"}}})
+    pid = plan.create("g", parent_model=gem)
+    assert plan.approve(pid, wait_for=True) == "done"
+    # map of the repo (GPT-OSS), planner, both steps (GPT-OSS, even the one marked general), then the scout (GPT-OSS) and the review that decides on its facts
+    assert [c[1] for c in env.calls() if c[0] == "agy"] == [OSS, gem, OSS, OSS, OSS, gem]
+    assert [c for c in env.calls() if c[0] == "review"] == [["review", "scouted"]]
+    st = json.loads((env.home / "plans" / pid / "state.json").read_text())
+    assert st["scout"] == {"status": "ok", "facts": [{"file": "a.py", "line": 1, "quote": "value = 1", "note": "the constant"}], "dropped": 2}  # only the quote that is really in the file
+    assert [(c["role"], c["backend"]) for c in st["calls"]] == [("map", f"agy:{OSS}"), ("planner", f"agy:{gem}"), ("step:s1", f"agy:{OSS}"), ("step:s2", f"agy:{OSS}"), ("scout", f"agy:{OSS}"), ("review", f"agy:{gem}")]
+    assert "| scout | agy:gpt-oss-120b-medium | 1 | 7 |" in (env.home / "plans" / pid / "report.md").read_text()
+    for k, v in st["tokens"].items():  # the totals count the map and planner calls too: they agree with the ledger rows
+        assert v == sum(c.get(k, 0) for c in st["calls"]), k
+    assert st["tokens"]["input_tokens"] > 0
+    assert [s["kind"] for s in json.loads((env.home / "plans" / pid / "plan.json").read_text())["steps"]] == ["code", "general"]  # a missing or unknown kind means code
+
+
 def test_gpt_oss_dead_key_fails_the_plan_but_never_switches_model(env, monkeypatch):
     monkeypatch.setenv("FAKE_AGY_DEAD", OSS)
     env.script([step("s1")], {"s1": {}})
@@ -596,6 +618,13 @@ def test_acceptance_command_gets_no_credentials_from_the_environment(env, monkey
     monkeypatch.setenv("SECRET_PROBE_TOKEN", "hunter2hunter2")
     monkeypatch.setenv("KEEP_ME", "ok")
     pid = _approved_not_started(env, monkeypatch, acc='test -z "$SECRET_PROBE_TOKEN" && test "$KEEP_ME" = ok && test -f a.py')
+    assert plan.run(pid) == "done"
+
+
+def test_acceptance_command_keeps_the_git_config_pairs_of_the_runner(env, monkeypatch):
+    for k, v in (("GIT_CONFIG_COUNT", "1"), ("GIT_CONFIG_KEY_0", "core.fileMode"), ("GIT_CONFIG_VALUE_0", "false")):
+        monkeypatch.setenv(k, v)
+    pid = _approved_not_started(env, monkeypatch, acc='test "$(git config --get core.fileMode)" = false && test -f a.py')
     assert plan.run(pid) == "done"
 
 

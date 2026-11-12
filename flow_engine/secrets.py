@@ -15,6 +15,7 @@ SECRET_PATTERNS = [
 ]
 # one name per SECRET_PATTERNS entry, shown in gate findings
 RULE_NAMES = ["private-key", "sk-key", "aws-key", "github-token", "bearer-token", "assigned-secret"]
+SHAPE_RULES = {"private-key", "sk-key", "aws-key", "github-token"}
 # file names that look like secrets; .env.example and friends are templates, not secrets
 SECRET_FILE_GLOBS = [".env", ".env.*", "*.pem", "*.key", "id_rsa", "id_ed25519", "credentials.json"]
 SECRET_FILE_SAFE = [".env.example", ".env.sample", ".env.template"]
@@ -26,6 +27,24 @@ def redact(text):
     for rx, repl in SECRET_PATTERNS:
         text = rx.sub(repl, text)
     return text
+
+
+def redact_shapes(text):
+    """Mask only the secrets with a fixed shape (private key block, sk-, AKIA, gh tokens). For code a model must read: the assigned-secret rule would also rewrite `token = self.next_token()`."""
+    text = "" if text is None else str(text)
+    for (rx, repl), name in zip(SECRET_PATTERNS, RULE_NAMES):
+        if name in SHAPE_RULES:
+            text = rx.sub(repl, text)
+    return text
+
+
+def redact_obj(o):
+    """redact() applied to every string inside a JSON-able value. Never redact the serialised text instead: a mask that swallows a closing quote or brace leaves a file that no longer parses."""
+    if isinstance(o, dict):
+        return {redact_obj(k) if isinstance(k, str) else k: redact_obj(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [redact_obj(v) for v in o]
+    return redact(o) if isinstance(o, str) else o
 
 
 def scan_line(line):

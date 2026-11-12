@@ -15,7 +15,7 @@ import tempfile
 
 from flow_engine import audit, bridge
 from flow_engine.audit import is_test_file  # noqa: F401  (re-exported: the constraints gate and the tests use gate.is_test_file)
-from flow_engine.secrets import scan_line, secret_file_name
+from flow_engine.secrets import redact, scan_line, secret_file_name
 
 
 def _run(root, cmd, **kw):
@@ -35,6 +35,7 @@ def _changed(root, *exts):
 
 # Markers are written with a character class (e.g. "[o]") so this line's own diff does not match the gate it defines.
 WEAK = re.compile(r"^\+.*(@ts-ign[o]re|eslint-disabl[e]|type:\s*ignore|pytest\.mark\.(skip|xfail)|\bxit\(|\bit\.skip|no[q]a|no[s]ec\b)", re.M)
+REEXPORT = re.compile(r"no[q]a:\s*F401\b")
 DROPPED = re.compile(r"^-\s*(def test_|it\(|test\()")
 ASSERT = re.compile(r"^\s*assert\b")
 
@@ -45,14 +46,15 @@ def _per_file(diff):
     for l in diff.splitlines():
         if l.startswith("diff --git "):
             cur, in_hunk = l.rsplit(" b/", 1)[-1], False
-            stats.setdefault(cur, {"asserts": 0, "weak": 0})
+            stats.setdefault(cur, {"asserts": 0, "weak": 0, "lines": []})
         elif l.startswith("@@"):
             in_hunk = True
         elif in_hunk and cur and l[:1] in ("+", "-"):
             if is_test_file(cur) and ASSERT.match(l[1:]):
                 stats[cur]["asserts"] += 1 if l[0] == "+" else -1
-            if l[0] == "+" and WEAK.match(l):
+            if l[0] == "+" and WEAK.match(l) and not (os.path.basename(cur) == "__init__.py" and REEXPORT.search(l)):  # `import x  # noqa: F401` is how a package re-exports
                 stats[cur]["weak"] += 1
+                stats[cur]["lines"].append(l[1:].strip()[:80])
     return stats
 
 
@@ -76,9 +78,13 @@ def constraints(root="."):
     stats = _per_file(diff)
     net = sum(s["asserts"] for f, s in stats.items() if is_test_file(f))
     files = sorted({f for f, s in stats.items() if s["weak"] or (is_test_file(f) and s["asserts"] < 0)} | set(deleted))
+    hits = sum(s["weak"] for s in stats.values())
     ok = not hits and not dropped and not deleted and net >= 0
-    return {"ok": ok, "weakened": len(hits), "removed_tests": len(dropped), "assert_net": net,
-            "deleted_tests": deleted, "files": files}
+    findings = [f"{f} adds a suppression marker: {l}" for f, s in stats.items() for l in s["lines"]] + [f"removed test line: {l[1:60]}" for l in dropped] + [f"{d} was deleted" for d in deleted]
+    if net < 0:
+        findings.append(f"net {net} assert lines in test files: put the assertions back")
+    return {"ok": ok, "weakened": hits, "removed_tests": len(dropped), "assert_net": net,
+            "deleted_tests": deleted, "files": files, "findings": [redact(x) for x in findings[:10]]}
 
 
 def _changed_names(root, ref="HEAD"):

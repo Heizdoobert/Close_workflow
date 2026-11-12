@@ -1,6 +1,7 @@
 """The 16-step method: analysis block (research..spec), blast-radius gate, review + simplify pass, coverage table in the report, SHIP decision. Interview, security and code-verify have their own test files."""
 
 import json
+import shutil
 import subprocess
 import sys
 
@@ -54,6 +55,37 @@ def test_create_asks_again_then_stores_the_analysis(env, monkeypatch):
     assert stored["root_cause"] and stored["blast_radius"]["affected"] == ["README.md"]
     shown = plan.show(pid)
     assert "root cause" in shown and "do s1" in shown  # the analysis does not push the steps out of the review text
+
+
+def _planner_replies(env, monkeypatch, replies):
+    """The planner agent answers `replies` one call at a time (last one repeats); returns the prompts it was given."""
+    prompts = []
+
+    def fake(chain, prompt, o, trace=None):
+        prompts.append(prompt)
+        return plan.agents.Result(True, replies[min(len(prompts) - 1, len(replies) - 1)]), 0.0, {}
+    monkeypatch.setattr(plan.agents, "call", fake)
+    return prompts
+
+
+def test_planner_gets_several_repair_rounds_and_a_raw_newline_in_a_string_is_fine(env, monkeypatch):
+    good = json.dumps({"analysis": GOOD, "steps": [step("s1", files=["a.py"], acc="python3 -c 'import a'")]})
+    lenient = good.replace("do s1", "do\ns1")  # a raw newline inside a JSON string: strict json.loads rejects it
+    assert lenient != good
+    nostep = json.dumps({"analysis": GOOD, "steps": [{k: v for k, v in step("s1", files=["a.py"], acc="true").items() if k != "prompt"}]})
+    prompts = _planner_replies(env, monkeypatch, ["not json", nostep, "{broken", lenient])
+    pid = plan.create("g")
+    assert len(prompts) == 4 and "was rejected" in prompts[1] and "missing prompt" in prompts[2]
+    assert prompts[3].count("was rejected") == 1  # only the last rejection is repeated, the prompt does not grow
+    assert json.loads(_read(env, pid, "plan.json"))["steps"][0]["id"] == "s1"
+
+
+def test_planner_gives_up_after_the_round_limit_and_says_why(env, monkeypatch):
+    monkeypatch.setenv("FLOW_PLAN_ROUNDS", "2")
+    prompts = _planner_replies(env, monkeypatch, ["still not json"])
+    with pytest.raises(plan.PlanError, match="did not produce a valid plan: .*no JSON"):
+        plan.create("g")
+    assert len(prompts) == 2
 
 
 def test_step_agents_are_given_the_analysis_and_the_no_rename_rule(env, monkeypatch):
@@ -146,6 +178,25 @@ def test_review_findings_are_kept_only_for_files_in_the_diff(env, monkeypatch):
     assert "invented" not in rep
 
 
+def test_the_diff_sent_to_review_and_ship_has_its_key_shaped_secrets_masked(env, monkeypatch):
+    real_which = shutil.which
+    monkeypatch.setattr(shutil, "which", lambda name, *a, **k: None if name == "gitleaks" else real_which(name, *a, **k))  # the test must not depend on gitleaks being installed
+    key = "".join(["AKIA", "ABCDEFGHIJKLMNOP"])  # built at runtime: no key-shaped literal in this file. Already in the repo, so only the diff's context lines carry it
+    (env.repo / "cfg.py").write_text(f'KEY = "{key}"\nA = 1\n')
+    _git(env.repo, "add", "-A")
+    _git(env.repo, "commit", "-q", "-m", "cfg")
+    seen = []
+    real = plan.agents.call
+    monkeypatch.setattr(plan.agents, "call", lambda chain, prompt, o, t: (seen.append(prompt), real(chain, prompt, o, t))[1])
+    env.script([step("s1", files=["cfg.py", "b.py", "c.py"], acc="python3 -c 'import cfg, b, c'")],  # three files: a smaller change skips the SHIP fan-out
+               {"s1": {"files": {"cfg.py": f'KEY = "{key}"\nA = 2\n', "b.py": "B = 1\n", "c.py": "C = 1\n"}}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) == "done"
+    diffs = [p for p in seen if "A = 2" in p and "+++ b/cfg.py" in p]
+    assert len(diffs) >= 2  # the review and at least one SHIP persona saw the diff
+    assert all(key not in p and "[REDACTED]" in p for p in diffs) and not [p for p in seen if key in p]
+
+
 def test_all_sixteen_steps_appear_in_the_coverage_table(env, monkeypatch):
     pid = _run_plan(env, monkeypatch)
     rows = [l for l in _read(env, pid, "report.md").splitlines() if l.startswith("| ") and l.split("|")[1].strip().isdigit()]
@@ -157,6 +208,8 @@ def test_an_unusable_review_reply_does_not_change_the_plan_result(env, monkeypat
     pid = _run_plan(env, monkeypatch, "not json at all")
     st = json.loads(_read(env, pid, "state.json"))
     assert st["status"] == "done" and st["review"]["status"] == "not_run"
+    assert "reply tail: 'not json at all'" in st["review"]["error"]  # the failure can be read afterwards
+    assert len([c for c in env.calls() if c[0] == "review"]) == 2  # one retry for an unparsable reply
     rows = [l for l in _read(env, pid, "report.md").splitlines() if l.startswith("| 12 ") or l.startswith("| 13 ")]  # review and simplify
     assert len(rows) == 2 and all("THIẾU" in r for r in rows)  # the report says the step did not run
 
