@@ -644,3 +644,35 @@ def test_gate_tool_that_hangs_becomes_a_failed_gate_not_a_crash():
     from flow_engine import gate
     r = gate._run(".", ["sleep", "30"], timeout=1)
     assert r.returncode == 124 and "timeout" in r.stderr
+
+
+def test_a_runner_that_cannot_start_fails_the_plan_instead_of_leaving_it_approved(env, monkeypatch):
+    pid = _approved_not_started(env, monkeypatch)
+    real = plan.git
+
+    def broken(cwd, *a, **k):
+        if a[:2] == ("worktree", "add"):
+            raise RuntimeError("cannot create the worktree")
+        return real(cwd, *a, **k)
+    monkeypatch.setattr(plan, "git", broken)
+    assert plan.run(pid) == "failed"
+    st = json.loads((env.home / "plans" / pid / "state.json").read_text())
+    assert st["status"] == "failed" and "runner could not start" in st["error"]  # not 'approved': recover() would respawn it forever
+
+
+def test_retry_after_clean_continues_on_the_kept_result_branch(env, monkeypatch):
+    monkeypatch.setenv("FLOW_RETRIES", "0")
+    two = [step("a", files=["a.py"], acc="grep -q GOOD a.py"), step("b", files=["b.py"], acc="test -f b.py")]
+    env.script(two, {"a": {"files": {"a.py": "BAD\n"}}, "b": {"files": {"b.py": "1\n"}}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) == "partial"
+    assert any(f"{pid}: worktree wt/_plan" in line for line in plan.clean())  # the plan worktree goes, the branch flow/<pid> stays
+    env.script(two, {"a": {"files": {"a.py": "GOOD\n"}}, "b": {"files": {"b.py": "1\n"}}})
+    plan.retry(pid)
+    sf = env.home / "plans" / pid / "state.json"
+    for _ in range(200):
+        st = json.loads(sf.read_text())
+        if st["status"] in ("done", "failed", "partial"):
+            break
+        time.sleep(0.2)
+    assert st["status"] == "done", st

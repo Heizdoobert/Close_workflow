@@ -27,14 +27,25 @@ def _run(root, cmd, **kw):
         return subprocess.CompletedProcess(cmd, 124, "", f"timeout after {kw.get('timeout')}s")
 
 
+class GateError(RuntimeError):
+    """A gate could not look at the change (git failed): that is a failed gate, never a silent pass."""
+
+
+def _git(root, args, **kw):
+    r = _run(root, ["git", *args], **kw)
+    if r.returncode:
+        raise GateError(f"git {args[0]} failed ({r.returncode}): {r.stderr.strip()[:120]}")
+    return r
+
+
 def _changed(root, *exts):
-    out = _run(root, ["git", "diff", "--name-only", "HEAD"]).stdout.split()
+    out = _git(root, ["diff", "--name-only", "HEAD"]).stdout.split()
     out += _run(root, ["git", "ls-files", "-o", "--exclude-standard"]).stdout.split()
     return [f for f in out if f.endswith(exts) and os.path.isfile(os.path.join(root, f))]
 
 
 # Markers are written with a character class (e.g. "[o]") so this line's own diff does not match the gate it defines.
-WEAK = re.compile(r"^\+.*(@ts-ign[o]re|eslint-disabl[e]|type:\s*ignore|pytest\.mark\.(skip|xfail)|\bxit\(|\bit\.skip|no[q]a|no[s]ec\b)", re.M)
+WEAK = re.compile(r"^\+.*(@ts-ign[o]re|eslint-disabl[e]|type:\s*ignore|pytest\.mark\.(skip|xfail)|\bxit\(|\bit\.skip|no[q]a|no[s]ec\b|gitleaks:allo[w])", re.M)
 REEXPORT = re.compile(r"no[q]a:\s*F401\b")
 DROPPED = re.compile(r"^-\s*(def test_|it\(|test\()")
 ASSERT = re.compile(r"^\s*assert\b")
@@ -62,9 +73,9 @@ def _snapshot_diff(root, *flags):
     """Diff of the whole working tree against HEAD through a throwaway index: untracked files count as added and a plain move is a rename, not a delete."""
     with tempfile.TemporaryDirectory() as d:
         env = {**os.environ, "GIT_INDEX_FILE": os.path.join(d, "index")}
-        _run(root, ["git", "read-tree", "HEAD"], env=env)
-        _run(root, ["git", "add", "-A"], env=env)
-        return _run(root, ["git", "diff", "--cached", "-M", *flags, "HEAD"], env=env).stdout
+        _git(root, ["read-tree", "HEAD"], env=env)
+        _git(root, ["add", "-A"], env=env)
+        return _git(root, ["diff", "--cached", "-M", *flags, "HEAD"], env=env).stdout
 
 
 def constraints(root="."):
@@ -79,8 +90,10 @@ def constraints(root="."):
     net = sum(s["asserts"] for f, s in stats.items() if is_test_file(f))
     files = sorted({f for f, s in stats.items() if s["weak"] or (is_test_file(f) and s["asserts"] < 0)} | set(deleted))
     hits = sum(s["weak"] for s in stats.values())
-    ok = not hits and not dropped and not deleted and net >= 0
-    findings = [f"{f} adds a suppression marker: {l}" for f, s in stats.items() for l in s["lines"]] + [f"removed test line: {l[1:60]}" for l in dropped] + [f"{d} was deleted" for d in deleted]
+    scanner = [f for f in _changed_names(root) if os.path.basename(f).startswith(".gitleaks")]  # .gitleaks.toml / .gitleaksignore can hide a key
+    files = sorted(set(files) | set(scanner))
+    ok = not hits and not dropped and not deleted and net >= 0 and not scanner
+    findings = [f"{f} adds a suppression marker: {l}" for f, s in stats.items() for l in s["lines"]] + [f"removed test line: {l[1:60]}" for l in dropped] + [f"{d} was deleted" for d in deleted] + [f"{f} changes the secret scanner config" for f in scanner]
     if net < 0:
         findings.append(f"net {net} assert lines in test files: put the assertions back")
     return {"ok": ok, "weakened": hits, "removed_tests": len(dropped), "assert_net": net,
@@ -89,20 +102,20 @@ def constraints(root="."):
 
 def _changed_names(root, ref="HEAD"):
     """Every file the diff against `ref` touches, plus untracked files (NUL-separated, so odd names survive)."""
-    out = _run(root, ["git", "diff", "--name-only", "-z", ref]).stdout.split("\0")
+    out = _git(root, ["diff", "--name-only", "-z", ref]).stdout.split("\0")
     out += _run(root, ["git", "ls-files", "-o", "--exclude-standard", "-z"]).stdout.split("\0")
     return sorted({f for f in out if f})
 
 
 def _deleted(root, ref="HEAD"):
     """Paths the diff against `ref` deletes or renames away."""
-    return {l.split("\t")[1] for l in _run(root, ["git", "diff", "--name-status", "-M", ref]).stdout.splitlines() if l[:1] in ("D", "R") and "\t" in l}
+    return {l.split("\t")[1] for l in _git(root, ["diff", "--name-status", "-M", ref]).stdout.splitlines() if l[:1] in ("D", "R") and "\t" in l}
 
 
 def _added_lines(root, ref="HEAD"):
     """(file, line number, text) for each added line of the diff against `ref`, plus every text line of each untracked file. Binary files are skipped."""
     lines, cur, new_no, in_hunk = [], None, 0, False
-    for l in _run(root, ["git", "diff", ref, "-U0"]).stdout.splitlines():
+    for l in _git(root, ["diff", ref, "-U0"]).stdout.splitlines():
         if l.startswith("diff --git "):
             cur, in_hunk = l.rsplit(" b/", 1)[-1], False
         elif l.startswith("@@"):
@@ -140,12 +153,12 @@ def blast_radius(root, allowed):
     root = os.path.abspath(root)
     allowed = set(allowed)
     gone = []
-    for line in _run(root, ["git", "diff", "--name-status", "-M", "HEAD"]).stdout.splitlines():
+    for line in _git(root, ["diff", "--name-status", "-M", "HEAD"]).stdout.splitlines():
         kind, *paths = line.split("\t")
         if kind[:1] in ("D", "R") and paths[0] not in allowed and "__pycache__" not in paths[0] and not paths[0].endswith(".pyc"):
             gone.append(paths[0])
     readded = {m.group(1) for _f, _n, text in _added_lines(root) if (m := DEF.match(text))}
-    removed = {m.group(1) for l in _run(root, ["git", "diff", "HEAD", "-U0", "-M", "--", "*.py"]).stdout.splitlines() if l.startswith("-") and (m := DEF.match(l[1:]))} - readded
+    removed = {m.group(1) for l in _git(root, ["diff", "HEAD", "-U0", "-M", "--", "*.py"]).stdout.splitlines() if l.startswith("-") and (m := DEF.match(l[1:]))} - readded
     orphaned = []
     for name in sorted(removed):
         users = _run(root, ["git", "grep", "-l", "-w", "-F", "--untracked", "-e", name, "--", "*.py"]).stdout.split()
@@ -157,13 +170,22 @@ def blast_radius(root, allowed):
 
 def run_gates(root=".", allowed=None):
     """allowed = the files a plan step declared; given, the blast_radius, security (hardening) and code_verify gates run too."""
-    root = os.path.abspath(root)
+    try:
+        return _run_gates(os.path.abspath(root), allowed)
+    except GateError as e:  # git could not show the change: nothing was checked, so nothing passes
+        return {"ok": False, "gates": {"git": {"ok": False, "findings": [str(e)]}}}
+
+
+def _run_gates(root, allowed):
     gates = {}
 
     if shutil.which("gitleaks"):
         with tempfile.TemporaryDirectory() as td:
             rep = os.path.join(td, "r.json")
-            r = _run(root, ["gitleaks", "dir", ".", "--no-banner", "--redact", "-r", rep, "-f", "json"], timeout=120)
+            cfg = os.path.join(td, "gitleaks.toml")
+            with open(cfg, "w", encoding="utf-8") as fh:
+                fh.write("[extend]\nuseDefault = true\n")  # pinned: a .gitleaks.toml in the tree cannot allowlist its own keys
+            r = _run(root, ["gitleaks", "dir", ".", "--no-banner", "--redact", "--ignore-gitleaks-allow", "-c", cfg, "-r", rep, "-f", "json"], timeout=120)
             found = json.load(open(rep)) if os.path.exists(rep) and os.path.getsize(rep) else []
             gates["secrets"] = {"ok": r.returncode == 0, "engine": "gitleaks", "findings": [f"{f['File']}:{f['StartLine']} {f['RuleID']}" for f in found][:10]}
     else:

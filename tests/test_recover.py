@@ -181,3 +181,13 @@ def test_agent_child_is_killed_when_its_runner_is_sigkilled(tmp_path):
             os.killpg(agent_pid, signal.SIGKILL)
         except (NameError, OSError):
             pass
+
+
+def test_a_runner_that_keeps_dying_is_given_up_on_after_the_cap(home, spawned, monkeypatch):
+    monkeypatch.setenv("FLOW_MAX_RESUMES", "2")
+    make_plan(home, "pdead", "approved", approved=time.time() - 1000)
+    assert len([plan.recover() for _ in range(2)]) == 2 and spawned == ["pdead", "pdead"]
+    out = plan.recover()  # the third respawn is refused
+    st = json.loads((home / "plans" / "pdead" / "state.json").read_text(encoding="utf-8"))
+    assert spawned == ["pdead", "pdead"] and st["status"] == "failed" and "giving up" in st["error"] and out == ["gave up on pdead after 2 resumes"]
+    assert plan.recover() == []  # a failed plan is left alone

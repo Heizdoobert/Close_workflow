@@ -113,7 +113,7 @@ def test_clean_removes_worktrees_and_step_branches_and_keeps_result_branch(home,
 
 
 def test_clean_removes_result_branch_only_when_asked(home, repo):
-    make_plan(home, repo, "pres", "failed", finished=ago(0), wt=True)
+    make_plan(home, repo, "pres", "done", finished=ago(0), wt=True)
 
     out = plan.clean(result_branches=True)
 
@@ -170,3 +170,13 @@ def test_clean_cli_prints_what_was_removed(home, repo, capsys):
     assert "pdone: worktree wt/s1" in capsys.readouterr().out
     assert cli.main(["clean"]) == 0
     assert "nothing to clean" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("status", ["failed", "partial"])
+def test_clean_keeps_the_result_branch_of_a_plan_that_is_not_done(home, repo, status):
+    make_plan(home, repo, "pkeep", status, finished=ago(0), wt=True)  # its merged steps live only on flow/<pid>, and retry continues there
+
+    out = plan.clean(result_branches=True)
+
+    assert has_ref(repo, "refs/heads/flow/pkeep")
+    assert any("kept branch flow/pkeep" in line for line in out)
