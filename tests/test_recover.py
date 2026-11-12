@@ -117,6 +117,13 @@ def test_resume_stale_uses_the_same_helper_and_prints_its_lines(home, spawned, c
     assert spawned == ["p1"]
 
 
+def test_die_with_runner_is_a_no_op_off_linux(monkeypatch):
+    # off Linux there is no libc prctl: the helper must return quietly, never raise
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(agents, "_LIBC", None)
+    assert agents._die_with_runner() is None
+
+
 def test_orphan_agent_group_is_killed_by_recover(home, spawned):
     # a stand-in agent: its command line names claude, so recover treats the group as an agent
     agent = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", "claude"], start_new_session=True)
@@ -138,6 +145,8 @@ def test_orphan_agent_group_is_killed_by_recover(home, spawned):
 
 def test_agent_child_is_killed_when_its_runner_is_sigkilled(tmp_path):
     # the runner is a child python process whose step thread starts an agent; SIGKILL the runner, the agent must follow
+    if sys.platform != "linux":
+        pytest.skip("PR_SET_PDEATHSIG is Linux-only; macOS relies on flow-task recover")
     pidfile = tmp_path / "agent.pid"
     code = (
         "import threading, time\n"

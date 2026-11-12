@@ -1,6 +1,6 @@
 """Sub-agent backends (claude, agy, opencode) behind one call with retry, backoff and fallback.
 
-A backend spec is "claude:haiku", "claude:sonnet", "agy[:model-id]" or "opencode[:provider/model]".
+A backend spec is "claude:haiku", "claude:sonnet", "agy[:model-id]", "opencode[:provider/model]" or "api:<provider>/<model>" (HTTP, see api.py).
 Suffix "!" pins the model: persistent retries, resume of the same conversation, and NEVER a fallback to another model.
 Suffix "+" prefers the model with persistent retries, then (only if it truly cannot be called) the next spec runs.
 Transient failures (503/529/429/timeouts/connection resets) are retried with exponential backoff;
@@ -40,6 +40,12 @@ PERMANENT = re.compile(r"\b(401|403)\b|api key|unauthori[sz]ed|forbidden|expired
                        r"OCI runtime|no such file or directory|exec failed|permission denied|docker daemon|not found in \$PATH", re.I)
 GPT_OSS = "gpt-oss-120b-medium"  # the model id `agy models` lists for GPT-OSS 120B
 
+# USD per million tokens (input, output) for the agy models in use. These are estimates: check them against the provider's price list.
+# Keys are regexes matched against the model id; the longest matching key wins.
+AGY_PRICES = {r"gpt-?oss.*120b": (0.15, 0.60), r"gemini.*flash": (0.30, 2.50)}
+# a model not in the table is billed at this rate, deliberately high so an unknown model cannot overspend silently
+AGY_FALLBACK_RATE = (5.0, 25.0)
+
 
 @dataclass
 class Result:
@@ -51,6 +57,7 @@ class Result:
     transient: bool = False
     backend: str = ""
     session: str = ""  # agy conversation id, lets a retry continue instead of restart
+    over_budget: bool = False  # the call's cost exceeded its budget: never retried, never handed to another backend
 
 
 @dataclass
@@ -61,6 +68,8 @@ class Opts:
     timeout: int = 600
     resume: str = ""
     on_group: object = None  # called with the agent's process group id right after it starts (plan.py records it for recover)
+    prompt_only: bool = False  # True: the prompt holds everything the call needs, no repo access. Only the api backend reads it (it has no tools)
+    token_cap: int = 0  # api only: most tokens this call may spend (estimated input + max_tokens). 0 = no cap. CLI backends cannot be capped mid-call, so one running call can overshoot a plan's token budget
 
 
 def claude_bin():
@@ -272,6 +281,20 @@ def run_claude(model, prompt, o):
     return Result(True, r.get("result") or "", r.get("total_cost_usd", 0), tokens, backend=f"claude:{model}")
 
 
+def agy_rate(model):
+    """(input, output) USD per million tokens for an agy model id."""
+    m = (model or "").lower()
+    keys = [k for k in AGY_PRICES if re.search(k, m)]
+    return AGY_PRICES[max(keys, key=len)] if keys else AGY_FALLBACK_RATE
+
+
+def agy_cost(model, tokens):
+    """Estimated USD for one agy call. Cache reads and writes are billed at the input rate: a conservative estimate."""
+    rate_in, rate_out = agy_rate(model)
+    billed_in = tokens.get("input_tokens", 0) + tokens.get("cache_read", 0) + tokens.get("cache_create", 0)
+    return (billed_in * rate_in + tokens.get("output_tokens", 0) * rate_out) / 1_000_000
+
+
 def run_agy(model, prompt, o):
     exe = os.environ.get("FLOW_AGY") or shutil.which("agy")
     model = model or GPT_OSS
@@ -298,11 +321,15 @@ def run_agy(model, prompt, o):
     tokens = dict(input_tokens=u.get("input_tokens", 0), cache_read=u.get("cache_read_tokens", 0), cache_create=0, output_tokens=u.get("output_tokens", 0),
                   thinking=u.get("thinking_tokens", 0))
     sid = r.get("conversation_id", "") or o.resume
+    cost = agy_cost(model, tokens)  # agy reports tokens, not dollars: the cost is estimated from the price table
     if r.get("status") != "SUCCESS":
         res = _fail(f"{r.get('status')}: {r.get('response', '')}", name)
-        res.session, res.tokens = sid, tokens
+        res.session, res.tokens, res.cost = sid, tokens, cost
         return res
-    return Result(True, r.get("response", ""), 0.0, tokens, backend=name, session=sid)  # agy reports tokens, not dollars
+    if cost > o.budget:
+        return Result(False, error=f"agy budget exceeded: estimated ${cost:.4f} > budget ${o.budget:.2f}", cost=cost, tokens=tokens,
+                      backend=name, session=sid, over_budget=True)
+    return Result(True, r.get("response", ""), cost, tokens, backend=name, session=sid)
 
 
 def run_opencode(model, prompt, o):
@@ -342,7 +369,12 @@ def run_opencode(model, prompt, o):
     return Result(True, "".join(texts).strip(), cost, tok, backend="opencode")
 
 
-BACKENDS = {"claude": run_claude, "agy": run_agy, "opencode": run_opencode}
+def run_api(model, prompt, o):
+    from flow_engine import api  # lazy: api.py imports Result from this module
+    return api.run_api(model, prompt, o)
+
+
+BACKENDS = {"claude": run_claude, "agy": run_agy, "opencode": run_opencode, "api": run_api}
 
 
 def policy_chain(parent_model, role="code"):
@@ -366,6 +398,9 @@ def chain_from_env(default="claude:haiku", parent_model=None, role="code"):
     for s in chain or [default]:
         if s not in out:
             out.append(s)
+    api_rung = os.environ.get(f"FLOW_POLICY_API_{role.upper()}")  # optional last rung per role; unset = no change
+    if api_rung and api_rung.strip() not in out:
+        out.append(api_rung.strip())
     return out
 
 
@@ -400,17 +435,24 @@ def call(chain, prompt, o, trace=None, sleep=time.sleep):
             if res.ok:
                 trace.append({**ev, "action": "done"})
                 return res, spent, tokens
+            if res.over_budget:  # the budget is the limit, not the backend: no retry and no fallback
+                trace.append({**ev, "action": "over budget: stop"})
+                return last, spent, tokens
             permanent = PERMANENT.search(res.error) is not None and not res.transient
             # pinned/preferred: any error that a retry could cure is retried; others only when transient
             retryable = (res.transient or (pinned or prefer)) and not permanent
             if retryable and attempt < limit:
-                delay = min(ceiling, base * 2 ** attempt) * (0.5 + random.random() / 2)
+                backoff = min(ceiling, base * 2 ** attempt) * (0.5 + random.random() / 2)
+                delay = min(ceiling, max(backoff, res.retry_after))
                 if res.session:  # agy: continue the same conversation instead of starting over
                     oo = replace(o, resume=res.session)
                     prompt_now = "Your previous turn was interrupted by an error. Continue exactly where you stopped and finish the task."
                 trace.append({**ev, "action": f"retry in {delay:.1f}s" + (" (same conversation)" if res.session else "")})
                 sleep(delay)
                 continue
+            if res.budget:
+                trace.append({**ev, "action": "token budget used up: no fallback to a backend that cannot be capped"})
+                return last, spent, tokens
             if pinned:
                 trace.append({**ev, "action": "pinned model: no fallback to another model" + (" (permanent error)" if permanent else " (retries exhausted)")})
                 return last, spent, tokens

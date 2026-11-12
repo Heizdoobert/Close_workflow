@@ -82,6 +82,7 @@ def constraints(root="."):
     """Diff-level bar: no new suppressions, no removed tests, no deleted test files, no net loss of asserts in tests. A moved test file is not a deleted one."""
     root = os.path.abspath(root)
     diff = _snapshot_diff(root, "-U0")
+    hits = WEAK.findall(diff)
     dropped = [l for l in diff.splitlines() if not l.startswith("---") and DROPPED.match(l)]
     deleted = [l.split("\t", 1)[1] for l in _snapshot_diff(root, "--name-status", "--diff-filter=D").splitlines()
                if "\t" in l and is_test_file(l.split("\t", 1)[1])]

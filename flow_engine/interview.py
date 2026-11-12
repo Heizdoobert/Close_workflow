@@ -114,7 +114,7 @@ def step(goal, qa, chain, wd, rounds=None, trace=None):
     prompt = PROMPT.format(goal=goal, qa=qa_txt, wrap=WRAP if wrap else "", conf=CONFIDENT)
     cost = 0.0
     for _ in range(2):  # one repair round, like the planner
-        res, c, _t = agents.call(chain, prompt, agents.Opts(wd, agents.READ_TOOLS, float(os.environ.get("FLOW_INTERVIEW_USD", "0.10")), 300), trace if trace is not None else [])
+        res, c, _t = agents.call(chain, prompt, agents.Opts(wd, agents.READ_TOOLS, float(os.environ.get("FLOW_INTERVIEW_USD", "0.10")), 300, prompt_only=True), trace if trace is not None else [])
         cost += c
         if not res.ok:
             raise InterviewError(f"interview agent failed: {res.error}")

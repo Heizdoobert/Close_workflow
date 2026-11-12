@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import sys
 
-from flow_engine import __version__, agents, bridge, engine, gate, interview, plan, sandbox, selftest
+from flow_engine import __version__, agents, bridge, doctor_api, engine, gate, interview, plan, sandbox, selftest
 from flow_engine.resp import RedisError
 
 USAGE = ('usage: flow-task "<task message>"      store a task (with FLOW_EXEC=1 also run it)\n'
@@ -17,7 +17,7 @@ USAGE = ('usage: flow-task "<task message>"      store a task (with FLOW_EXEC=1 
          '       flow-task interview "<goal>" [--model ID]   ask what you really want (one question at a time), then draft the plan from the confirmed brief\n'
          '       flow-task interview-step "<goal>" [--qa FILE] [--model ID]   one interview round as JSON, for agents without a terminal\n'
          "       flow-task where [<plan>]   where a plan stands and the next action (default: newest plan of this repo)\n"
-         "       flow-task show <plan> | approve <plan> [--wait] | retry <plan> | reject <plan> | report <plan> | run <plan> | plans\n"
+         "       flow-task show <plan> | approve <plan> [--wait] [--allow-dirty] | retry <plan> | reject <plan> | report <plan> | run <plan> | plans\n"
          "       flow-task recover   resume plans whose runner died (no listener needed) and kill their orphan agent groups\n"
          "       flow-task clean [--older-than DAYS] [--result-branches]   remove finished plans' worktrees and flowstep/* branches (never a running plan)\n"
          "       flow-task doctor also reports the sandbox (bwrap) and gitleaks lines: a missing one is a warning, not a failure")
@@ -73,6 +73,8 @@ def doctor():
     checks = doctor_checks()
     for name, ok, detail, req in checks:
         print(f"{'OK  ' if ok else ('FAIL' if req else 'warn')}  {name:<13} {detail}")
+    for line in doctor_api.report():
+        print(line)
     return 0 if all(ok for _, ok, _, req in checks if req) else 1
 
 
@@ -122,7 +124,7 @@ def main(argv=None):
             print(plan.show(rest[0]))
             return 0
         if cmd == "approve" and rest:
-            out = plan.approve(rest[0], "--wait" in rest)
+            out = plan.approve(rest[0], "--wait" in rest, allow_dirty="--allow-dirty" in rest)
             for o in plan.load(rest[0])[2].get("overlap", []):
                 print(f"warning: plan {rest[0]} shares files with plan {o['plan']}: {', '.join(o['files'])} (merging both may conflict)", file=sys.stderr)
             print(out if out != "started" else f"approved: running in the background. Check: flow-task status {rest[0]}")
