@@ -35,15 +35,26 @@ def git_env():
     return {k: v for k, v in os.environ.items() if not k.startswith("GIT_CONFIG_")}
 
 
-def _cache_key(workdir, model, prompt):
-    """sha256 of the worktree HEAD, the model and the prompt. None when there is no git HEAD: then nothing is cached."""
+def _git_out(workdir, *args):
+    """stdout of a git command run in workdir, or None when it fails."""
     try:
-        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=workdir, capture_output=True, text=True, timeout=10, env=git_env())
+        res = subprocess.run(["git", *args], cwd=workdir, capture_output=True, text=True, timeout=10, env=git_env())
     except (OSError, subprocess.TimeoutExpired):
         return None
-    if head.returncode != 0 or not head.stdout.strip():
+    return res.stdout if res.returncode == 0 else None
+
+
+def _cache_key(workdir, model, prompt):
+    """sha256 of the worktree path, its HEAD, its uncommitted state, the model and the prompt. None when git cannot say: then nothing is cached."""
+    head = _git_out(workdir, "rev-parse", "HEAD")
+    if not head or not head.strip():
         return None
-    return hashlib.sha256("\0".join((head.stdout.strip(), model, prompt)).encode("utf-8")).hexdigest()
+    status = _git_out(workdir, "status", "--porcelain")
+    diff = _git_out(workdir, "diff", "HEAD")
+    if status is None or diff is None:
+        return None
+    parts = (os.path.realpath(workdir), head.strip(), status, diff, model, prompt)
+    return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
 
 def _breaker_allows(provider):
