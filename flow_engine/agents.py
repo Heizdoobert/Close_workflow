@@ -40,6 +40,12 @@ PERMANENT = re.compile(r"\b(401|403)\b|api key|unauthori[sz]ed|forbidden|expired
                        r"OCI runtime|no such file or directory|exec failed|permission denied|docker daemon|not found in \$PATH", re.I)
 GPT_OSS = "gpt-oss-120b-medium"  # the model id `agy models` lists for GPT-OSS 120B
 
+# USD per million tokens (input, output) for the agy models in use. These are estimates: check them against the provider's price list.
+# Keys are regexes matched against the model id; the longest matching key wins.
+AGY_PRICES = {r"gpt-?oss.*120b": (0.15, 0.60), r"gemini.*flash": (0.30, 2.50)}
+# a model not in the table is billed at this rate, deliberately high so an unknown model cannot overspend silently
+AGY_FALLBACK_RATE = (5.0, 25.0)
+
 
 @dataclass
 class Result:
@@ -51,8 +57,7 @@ class Result:
     transient: bool = False
     backend: str = ""
     session: str = ""  # agy conversation id, lets a retry continue instead of restart
-    retry_after: float = 0.0  # seconds the server asked us to wait (HTTP Retry-After); call() waits at least this long, still under its ceiling
-    budget: bool = False  # the plan's token budget refused this call: no later backend may take it over, a CLI call cannot be capped
+    over_budget: bool = False  # the call's cost exceeded its budget: never retried, never handed to another backend
 
 
 @dataclass
@@ -276,6 +281,20 @@ def run_claude(model, prompt, o):
     return Result(True, r.get("result") or "", r.get("total_cost_usd", 0), tokens, backend=f"claude:{model}")
 
 
+def agy_rate(model):
+    """(input, output) USD per million tokens for an agy model id."""
+    m = (model or "").lower()
+    keys = [k for k in AGY_PRICES if re.search(k, m)]
+    return AGY_PRICES[max(keys, key=len)] if keys else AGY_FALLBACK_RATE
+
+
+def agy_cost(model, tokens):
+    """Estimated USD for one agy call. Cache reads and writes are billed at the input rate: a conservative estimate."""
+    rate_in, rate_out = agy_rate(model)
+    billed_in = tokens.get("input_tokens", 0) + tokens.get("cache_read", 0) + tokens.get("cache_create", 0)
+    return (billed_in * rate_in + tokens.get("output_tokens", 0) * rate_out) / 1_000_000
+
+
 def run_agy(model, prompt, o):
     exe = os.environ.get("FLOW_AGY") or shutil.which("agy")
     model = model or GPT_OSS
@@ -302,11 +321,15 @@ def run_agy(model, prompt, o):
     tokens = dict(input_tokens=u.get("input_tokens", 0), cache_read=u.get("cache_read_tokens", 0), cache_create=0, output_tokens=u.get("output_tokens", 0),
                   thinking=u.get("thinking_tokens", 0))
     sid = r.get("conversation_id", "") or o.resume
+    cost = agy_cost(model, tokens)  # agy reports tokens, not dollars: the cost is estimated from the price table
     if r.get("status") != "SUCCESS":
         res = _fail(f"{r.get('status')}: {r.get('response', '')}", name)
-        res.session, res.tokens = sid, tokens
+        res.session, res.tokens, res.cost = sid, tokens, cost
         return res
-    return Result(True, r.get("response", ""), 0.0, tokens, backend=name, session=sid)  # agy reports tokens, not dollars
+    if cost > o.budget:
+        return Result(False, error=f"agy budget exceeded: estimated ${cost:.4f} > budget ${o.budget:.2f}", cost=cost, tokens=tokens,
+                      backend=name, session=sid, over_budget=True)
+    return Result(True, r.get("response", ""), cost, tokens, backend=name, session=sid)
 
 
 def run_opencode(model, prompt, o):
@@ -412,6 +435,9 @@ def call(chain, prompt, o, trace=None, sleep=time.sleep):
             if res.ok:
                 trace.append({**ev, "action": "done"})
                 return res, spent, tokens
+            if res.over_budget:  # the budget is the limit, not the backend: no retry and no fallback
+                trace.append({**ev, "action": "over budget: stop"})
+                return last, spent, tokens
             permanent = PERMANENT.search(res.error) is not None and not res.transient
             # pinned/preferred: any error that a retry could cure is retried; others only when transient
             retryable = (res.transient or (pinned or prefer)) and not permanent

@@ -31,7 +31,7 @@ IDENT = ["-c", "user.name=flow-engine", "-c", "user.email=flow@localhost"]
 JUNK = [":(glob)**/__pycache__/**", ":(glob)**/*.pyc", ":(glob).pytest_cache/**"]  # build junk a repo without a .gitignore would otherwise commit
 WIN_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
 WIN_BAD_CHARS = re.compile(r'[<>:"|?*]')
-SECRET_ENV = re.compile(r"(?i)(KEY|TOKEN|SECRET|PASSW|CREDENTIAL|AUTH)")
+SECRET_ENV = re.compile(r"(?i)^(?!GIT_CONFIG_KEY_\d+$).*(KEY|TOKEN|SECRET|PASSW|CREDENTIAL|AUTH)")  # GIT_CONFIG_KEY_n is a config name: dropping it leaves GIT_CONFIG_COUNT pointing at nothing and every git call fails
 ACCEPT_TAIL_BYTES = 64 * 1024  # per stream; only the last part is kept for the report and the retry prompt
 class PlanError(Exception):
     pass
@@ -327,8 +327,10 @@ def spawn(pid):
                          "PYTHONPATH": os.pathsep.join(filter(None, [str(Path(__file__).resolve().parent.parent), os.environ.get("PYTHONPATH")]))}, **kw)
 
 
-def _hash(plan):
-    return hashlib.sha256(json.dumps(plan, sort_keys=True).encode()).hexdigest()[:16]
+def _hash(plan, dirty=()):
+    """Approval hash. Dirty files that were accepted at approve are part of it: the approval covers what the user saw."""
+    payload = {"plan": plan, "dirty": list(dirty)} if dirty else plan  # no dirty list: same hash as before this check existed
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
 
 
 def overlaps(pid, plan):
@@ -353,13 +355,21 @@ def overlaps(pid, plan):
     return out
 
 
-def approve(pid, wait_for=False):
-    """Freeze the (possibly hand-edited) plan by hash and start the runner in the background."""
+def approve(pid, wait_for=False, allow_dirty=False):
+    """Freeze the (possibly hand-edited) plan by hash and start the runner in the background.
+    Uncommitted files in the repo are not seen by the steps (they run from the commit), so approve refuses them unless `allow_dirty`;
+    with it, the list is recorded in state and part of plan_hash."""
     d, plan, state = load(pid)
     if state["status"] not in ("awaiting_approval",):
         raise PlanError(f"plan is {state['status']}, not awaiting approval")
     validate(plan)
-    state.update(status="approved", approved=engine.now(), plan_hash=_hash(plan), overlap=overlaps(pid, plan))
+    dirty = git(plan["repo"], "status", "--porcelain", check=False).stdout.splitlines()[:20]
+    if dirty and not allow_dirty:
+        raise PlanError("repo has uncommitted changes the steps will not see (they run from the commit): " + ", ".join(dirty)
+                        + ". Commit them, or approve with --allow-dirty to run from the commit anyway")
+    state.update(status="approved", approved=engine.now(), plan_hash=_hash(plan, dirty), overlap=overlaps(pid, plan))
+    if dirty:
+        state["dirty_approved"] = dirty
     state["steps"] = {s["id"]: state["steps"].get(s["id"], {"status": "pending"}) for s in plan["steps"]}
     _atomic(d / "state.json", json.dumps(state, indent=2, ensure_ascii=False))
     _mirror(pid, status="approved")
@@ -811,7 +821,7 @@ def _launchable(ctx, running_files):
 def run(pid):
     _nomode()
     d, plan, state = load(pid)
-    if state.get("plan_hash") and _hash(plan) != state["plan_hash"]:  # approval froze this plan: an edited plan.json must not run (or resume)
+    if state.get("plan_hash") and _hash(plan, state.get("dirty_approved", [])) != state["plan_hash"]:  # approval froze this plan: an edited plan.json must not run (or resume)
         state.update(status="failed", error="plan.json changed after approval: not running it. Re-plan and approve again", finished=engine.now())
         _atomic(d / "state.json", json.dumps(state, indent=2, ensure_ascii=False))
         raise PlanError(state["error"])
