@@ -140,3 +140,17 @@ def test_recall_drops_insights_that_name_another_repo(monkeypatch, tmp_path):
     assert bridge.local("note about " + str(tmp_path) + "/a.py", tmp_path)
     assert not bridge.local("[FILE] /mnt/second_drive/Light-Story/src/index.ts", tmp_path)
     assert bridge.local("no paths here", tmp_path)
+
+
+def test_listener_keeps_a_task_queued_while_redis_is_down(fake_redis, monkeypatch):
+    from flow_engine.resp import RedisError
+    engine.INCOMING.mkdir()
+    path = engine.INCOMING / "a.txt"
+    path.write_text("a task", encoding="utf-8")
+
+    def down(message):
+        raise RedisError("connection refused")
+    monkeypatch.setattr(engine, "submit", down)
+    monkeypatch.setattr(engine, "execute", lambda *a: pytest.fail("a task that was never stored must not run"))
+    engine._process(path, engine.redis())
+    assert path.exists() and not list((engine.INCOMING / "failed").glob("*"))  # still queued, retried on the next poll

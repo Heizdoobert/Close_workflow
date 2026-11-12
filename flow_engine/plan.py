@@ -13,6 +13,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import signal
 import subprocess
 import sys
@@ -151,6 +152,7 @@ def escaping_paths(wt, rels):
 
 
 TRIVIAL_SEGMENT = re.compile(r"(true|:|exit(\s+\d+)?|(echo|printf)(\s.*)?)")
+SWALLOWS = re.compile(r"(true|:|exit\s+0|(echo|printf)(\s.*)?)")  # always succeeds: after `||` or as the last `;` part it hides every failure before it
 
 
 def trivial_acceptance_reason(cmd):
@@ -161,6 +163,10 @@ def trivial_acceptance_reason(cmd):
         return "empty acceptance command"
     if all(TRIVIAL_SEGMENT.fullmatch(s) for s in segments):
         return f"trivial acceptance command {cmd.strip()!r} proves nothing"
+    parts = [p.strip() for p in re.split(r"(&&|\|\||;|\|)", cmd)]  # even index = segment, odd = the operator before the next one
+    ops = [(parts[i - 1], parts[i]) for i in range(2, len(parts), 2) if parts[i]]
+    if any(op == "||" and SWALLOWS.fullmatch(seg) for op, seg in ops) or (ops and ops[-1][0] == ";" and SWALLOWS.fullmatch(ops[-1][1])):
+        return f"acceptance command {cmd.strip()!r} ends in a step that always succeeds, so it cannot fail"
     return ""
 
 
@@ -381,7 +387,7 @@ def retry(pid):
             ev.update(status="pending", previous=old)
     for k in ("integration", "error", "finished"):
         state.pop(k, None)
-    state.update(status="approved", retries=state.get("retries", 0) + 1)
+    state.update(status="approved", retries=state.get("retries", 0) + 1, resumes=0)
     _atomic(d / "state.json", json.dumps(state, indent=2, ensure_ascii=False))
     _mirror(pid, status="approved")
     spawn(pid)
@@ -418,7 +424,11 @@ def _clean_plan(d, plan_, result_branches):
     for sid in sorted(step_ids):
         drop(["branch", "-D", f"flowstep/{pid}/{sid}"], f"branch flowstep/{pid}/{sid}")
     if result_branches:
-        drop(["branch", "-D", f"flow/{pid}"], f"branch flow/{pid}")
+        status = json.loads((d / "state.json").read_text(encoding="utf-8")).get("status") if (d / "state.json").is_file() else ""
+        if status == "done":
+            drop(["branch", "-D", f"flow/{pid}"], f"branch flow/{pid}")
+        else:  # failed/partial: the merged steps live only on this branch and `retry` continues on it
+            out.append(f"{pid}: kept branch flow/{pid} (plan is {status or 'unknown'}, not done)")
     try:
         wt_dir.rmdir()  # only when empty
     except OSError:
@@ -531,7 +541,8 @@ def accept(step, wt):
     # output goes to files, not pipes: a grandchild that outlives the kill cannot keep us waiting on an open pipe
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         env = {k: v for k, v in os.environ.items() if not SECRET_ENV.search(k)}  # the planner wrote this command: it gets no API keys
-        p = subprocess.Popen(cmd, shell=True, cwd=wt, stdin=subprocess.DEVNULL, stdout=out, stderr=err, env=env, **_new_group())
+        bash = None if os.name == "nt" else shutil.which("bash")  # pipefail: `pytest | tail` must fail when pytest does (sh/dash only reports the last stage)
+        p = subprocess.Popen(["bash", "-o", "pipefail", "-c", cmd] if bash else cmd, shell=not bash, cwd=wt, stdin=subprocess.DEVNULL, stdout=out, stderr=err, env=env, **_new_group())
         try:
             p.wait(timeout=int(os.environ.get("FLOW_ACCEPT_TIMEOUT", "300")))
         except subprocess.TimeoutExpired:
@@ -670,8 +681,8 @@ def do_step(ctx, step, rescued=False):
         reflection = _reflection(res.text)
         if reflection:
             ev["reflection"] = reflection
+        acc = accept(step, str(wt))  # first: a test that writes a key-shaped file must be seen by the secrets gate that runs after it
         g = gate.run_gates(str(wt), allowed=step["files"])
-        acc = accept(step, str(wt))
         ev["attempts"].append({"n": n, "gates": _gate_line(g), "gates_ok": g["ok"], "acceptance": acc})
         ctx.save()
         if g["ok"] and acc["ok"]:
@@ -776,19 +787,30 @@ def run(pid):
         return "already running"
     if state["status"] not in ("approved", "running"):
         raise PlanError(f"plan is {state['status']}")
-    _kill_orphans(d, state)  # under the lock: groups a dead runner left behind are not ours to keep
-    ctx = Ctx(pid, d, plan, state)
-    ctx.plan_wt.parent.mkdir(exist_ok=True)
-    if not ctx.plan_wt.exists():
-        git(ctx.repo, "worktree", "add", "-q", "-b", ctx.branch, str(ctx.plan_wt), plan["base"])
-    for sid, ev in state["steps"].items():  # resume: a step caught mid-run by a crash starts over
-        if ev["status"] in ("running", "queued"):  # queued = picked, killed before its first save: _launchable only takes pending
-            _cleanup(ctx, sid)
-            ev.update(status="pending")
-            ev.setdefault("rescues", []).append("runner died mid-step: restarted")
-    state.update(status="running", started=state.get("started") or engine.now(), heartbeat=time.time())
-    ctx.save()
-    _mirror(pid, status="running")
+    try:
+        _kill_orphans(d, state)  # under the lock: groups a dead runner left behind are not ours to keep
+        ctx = Ctx(pid, d, plan, state)
+        ctx.plan_wt.parent.mkdir(exist_ok=True)
+        if not ctx.plan_wt.exists():
+            git(ctx.repo, "worktree", "prune", check=False)
+            if git(ctx.repo, "rev-parse", "--verify", "-q", f"refs/heads/{ctx.branch}", check=False).returncode == 0:
+                git(ctx.repo, "worktree", "add", "-q", str(ctx.plan_wt), ctx.branch)  # `clean` keeps flow/<pid>: a retry continues on it
+            else:
+                git(ctx.repo, "worktree", "add", "-q", "-b", ctx.branch, str(ctx.plan_wt), plan["base"])
+        for sid, ev in state["steps"].items():  # resume: a step caught mid-run by a crash starts over
+            if ev["status"] in ("running", "queued"):  # queued = picked, killed before its first save: _launchable only takes pending
+                _cleanup(ctx, sid)
+                ev.update(status="pending")
+                ev.setdefault("rescues", []).append("runner died mid-step: restarted")
+        state.update(status="running", started=state.get("started") or engine.now(), heartbeat=time.time())
+        ctx.save()
+        _mirror(pid, status="running")
+    except Exception as e:  # nothing ran yet: a plan left as approved would be respawned forever by recover() and the listener
+        state.update(status="failed", error=redact(f"runner could not start: {type(e).__name__}: {e}")[:300], finished=engine.now())
+        _atomic(d / "state.json", json.dumps(state, indent=2, ensure_ascii=False))
+        _mirror(pid, status="failed")
+        lock.close()
+        return "failed"
     stop = threading.Event()
 
     def beat():
@@ -945,8 +967,8 @@ def ship_pass(ctx):
     if os.environ.get("FLOW_SHIP", "1") != "1":
         return {"decision": "off"}
     wt, base, st = str(ctx.plan_wt), ctx.plan["base"], ctx.state
-    changed = git(wt, "diff", "--name-only", f"{base}..HEAD").stdout.splitlines()
-    nums = [l.split("\t")[:2] for l in git(wt, "diff", "--numstat", f"{base}..HEAD").stdout.splitlines()]
+    changed = git(wt, "diff", "--name-only", "--no-renames", f"{base}..HEAD").stdout.splitlines()  # a rename lists both the old and the new path
+    nums = [l.split("\t")[:2] for l in git(wt, "diff", "--numstat", "--no-renames", f"{base}..HEAD").stdout.splitlines()]
     lines = sum(int(a) + int(b) for a, b in nums if a.isdigit() and b.isdigit())
     full = git(wt, "diff", f"{base}..HEAD").stdout
     small = method.is_small(changed, lines, full)
@@ -1002,6 +1024,14 @@ def _resume_if_dead(d, st, stale):
         return None  # a live runner holds the lock
     try:
         killed = _kill_orphans(d, st)
+        n = int(st.get("resumes", 0)) + 1
+        if n > int(os.environ.get("FLOW_MAX_RESUMES", "10")):  # a runner that keeps dying is a bug to read, not something to respawn forever
+            st.update(status="failed", error=f"runner died {n - 1} times: giving up (flow-task retry {st['id']} to try again)", finished=engine.now())
+            _atomic(d / "state.json", json.dumps(st, indent=2, ensure_ascii=False))
+            _mirror(st["id"], status="failed")
+            return f"gave up on {st['id']} after {n - 1} resumes"
+        st["resumes"] = n
+        _atomic(d / "state.json", json.dumps(st, indent=2, ensure_ascii=False))
     finally:
         lk.close()
     spawn(st["id"])

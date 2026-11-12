@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from flow_engine import agents, bridge, gate
-from flow_engine.resp import Redis
+from flow_engine.resp import Redis, RedisError
 
 ROOT = Path(os.environ.get("FLOW_HOME") or Path(__file__).resolve().parent.parent)
 INCOMING, LOGS = ROOT / "incoming_tasks", ROOT / "logs"
@@ -170,17 +170,28 @@ def listener_running():
     return lock is None
 
 
+_WARNED = set()
+
+
 def _process(path, redis_):
     stamp = time.strftime("%Y%m%d_%H%M%S")
     dest = INCOMING / "failed"
     message = _read_task(path)
     if message:
+        tid = None
         try:
             tid = path.stem if path.stem.isdigit() and redis_.call("EXISTS", f"task:{path.stem}") else submit(message)
             ok, rec = execute(tid, message)
             dest = INCOMING / ("processed" if ok else "failed")
             (LOGS / f"{path.stem}_{stamp}.log").write_text(json.dumps(rec, ensure_ascii=False) + "\n", encoding="utf-8")
             print(f"{'done' if ok else 'failed'} task {tid} ({rec['attempts']} attempt(s), ${rec['cost_usd']})", flush=True)
+        except (RedisError, OSError) as e:
+            if tid is None:  # Redis was down before the task was tried: keep it queued for the next poll instead of parking it as failed
+                if path.name not in _WARNED:
+                    _WARNED.add(path.name)
+                    print(f"redis unavailable, {path.name} stays queued: {type(e).__name__}: {e}", flush=True)
+                return
+            print(f"error on {path.name}: {type(e).__name__}: {e}", flush=True)
         except Exception as e:
             print(f"error on {path.name}: {type(e).__name__}: {e}", flush=True)
     dest.mkdir(parents=True, exist_ok=True)

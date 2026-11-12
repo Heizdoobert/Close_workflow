@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+import sys
 
 import pytest
 
@@ -28,13 +29,15 @@ def step(acc):
     return {"steps": [{"id": "s1", "title": "t", "reason": "r", "deps": [], "files": [], "acceptance": acc, "prompt": "p"}]}
 
 
-@pytest.mark.parametrize("acc", ["", "   ", "true", ":", "exit 0", "echo done", "printf ok", "true && echo ok", "echo a | true"])
+@pytest.mark.parametrize("acc", ["", "   ", "true", ":", "exit 0", "echo done", "printf ok", "true && echo ok", "echo a | true",
+                                 "python3 -m pytest -q || true", "python3 -m pytest -q; echo done", "python3 -m pytest -q || echo failed"])
 def test_validate_rejects_trivial_acceptance_and_names_the_step(acc):
     with pytest.raises(plan.PlanError, match="step s1"):
         plan.validate(step(acc))
 
 
-@pytest.mark.parametrize("acc", ["python3 -m pytest -q tests/test_x.py", "echo start && python3 -m pytest -q tests/test_x.py", "test -f a.py"])
+@pytest.mark.parametrize("acc", ["python3 -m pytest -q tests/test_x.py", "echo start && python3 -m pytest -q tests/test_x.py", "test -f a.py",
+                                 "test -f a.py || exit 1", "python3 -m pytest -q | tail -3", "python3 -m pytest -q; echo x; python3 -m pytest -q"])
 def test_validate_accepts_real_acceptance(acc):
     assert plan.validate(step(acc))["steps"][0]["acceptance"] == acc
 
@@ -112,3 +115,9 @@ def test_package_reexport_noqa_is_not_a_weakened_bar_but_other_suppressions_are(
     (tmp_path / "pkg" / "b.py").write_text("import os  # no" + "qa\n")
     res = gate.constraints(tmp_path)
     assert not res["ok"] and any("pkg/b.py" in x and "import os" in x for x in res["findings"])
+
+
+@pytest.mark.skipif(not shutil.which("bash") or sys.platform == "win32", reason="needs bash")
+def test_accept_fails_when_a_pipe_stage_fails(tmp_path):
+    assert plan.accept({"acceptance": "false | tail -1"}, str(tmp_path))["ok"] is False  # dash would report only tail's rc
+    assert plan.accept({"acceptance": "true | tail -1"}, str(tmp_path))["ok"] is True

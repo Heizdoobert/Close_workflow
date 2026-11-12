@@ -254,3 +254,15 @@ def test_nomode_makes_git_ignore_mode_changes_only_when_the_filesystem_loses_the
     assert plan.os.environ["GIT_CONFIG_COUNT"] == "1"
     plan._nomode()  # idempotent per process: a second call must not stack another entry
     assert plan.os.environ["GIT_CONFIG_COUNT"] == "1"
+
+
+def test_a_key_written_by_the_acceptance_command_is_caught_before_the_commit(env, monkeypatch):
+    real_which = shutil.which
+    monkeypatch.setattr(shutil, "which", lambda name, *a, **k: None if name == "gitleaks" else real_which(name, *a, **k))  # the built-in scan, whatever is installed
+    acc = "python3 -c \"open('leak.txt', 'w').write(''.join(['gh', 'p_', 'a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8']))\" && test -f a.py"  # the key exists only after the command ran
+    env.script([step("s1", files=["a.py"], acc=acc)], {"s1": {"files": {"a.py": "A = 1\n"}}})
+    pid = plan.create("g")
+    assert plan.approve(pid, wait_for=True) != "done"
+    st = json.loads(_read(env, pid, "state.json"))
+    assert st["steps"]["s1"]["status"] == "failed" and "secrets:FAIL" in st["steps"]["s1"]["attempts"][0]["gates"]
+    assert "p_a1B2c3D4" not in json.dumps(st)  # and the key itself is not echoed into the state

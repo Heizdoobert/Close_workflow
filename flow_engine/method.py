@@ -231,7 +231,7 @@ PERSONAS = {
     "test-engineer": "Coverage analysis of the change: which happy paths, edge cases, error paths and concurrency cases have no test (Read the existing tests). `problem` = the gap, `fix` = the test to add. Severity: critical (core path untested), important, suggestion.",
 }
 SENSITIVE_PATH = re.compile(r"(?i)(auth|login|passw|session|token|secret|credential|payment|billing|checkout|invoice|migrat|schema|\.sql$|database|(^|/)db[/._]|models?[/.]|\.env|config|setting|docker|compose|\.ya?ml$|\.toml$|\.github/)")
-SENSITIVE_TEXT = re.compile(r"(?i)\b(password|passwd|secret|token|credential|select\s.+\sfrom|insert\s+into|delete\s+from|\.execute\()")
+SENSITIVE_TEXT = re.compile(r"(?i)\b(password|passwd|secret|token|credential|login_required|permission|authori[sz]|authenticat|csrf|select\s.+\sfrom|insert\s+into|delete\s+from|\.execute\()")
 INFRA_PATH = re.compile(r"(?i)(\.env|config|setting|docker|compose|migrat|schema|\.sql$|\.ya?ml$|\.toml$|\.github/|requirements|package\.json|pyproject)")
 UI_PATH = re.compile(r"(?i)\.(html?|css|scss|jsx|tsx|vue|svelte)$")
 DOC_PATH = re.compile(r"(?i)(\.(md|rst)$|(^|/)docs?/|changelog)")
@@ -241,7 +241,7 @@ SEV = ("critical", "high", "important", "medium", "low", "suggestion")
 def is_small(changed, lines, diff):
     """ship rule 5: the fan-out may be skipped only for <=2 files, <50 changed lines and nothing touching auth, payments, data access or config."""
     return len(changed) <= 2 and lines < 50 and not any(SENSITIVE_PATH.search(f) for f in changed) and not SENSITIVE_TEXT.search(
-        "\n".join(l for l in diff.splitlines() if l.startswith("+") and not l.startswith("+++")))
+        "\n".join(l for l in diff.splitlines() if l[:1] in "+-" and not l.startswith(("+++", "---"))))  # removed lines too: dropping a guard is a change to it
 
 
 def persona_prompt(name, goal, spec, changed, diff, facts=""):
@@ -253,15 +253,19 @@ def persona_prompt(name, goal, spec, changed, diff, facts=""):
 
 
 def parse_persona(name, obj, changed):
-    """Findings about files in the diff only (counted as dropped otherwise); severity normalised, unknown -> important."""
-    raw = [i for i in (obj.get("findings") if isinstance(obj.get("findings"), list) else []) if isinstance(i, dict)]
-    mine = [i for i in raw if _s(i.get("file"), 300) in changed]
+    """Findings about files in the diff only (counted as dropped otherwise). An answer that is not the findings schema is not_run, never a silent GO;
+    an unknown severity counts as critical (fail closed); the 12 kept are the most severe."""
+    items = obj.get("findings") if isinstance(obj, dict) else None
+    if not isinstance(items, list) or not all(isinstance(i, dict) for i in items):
+        return {"status": "not_run", "error": "the answer is not the findings schema"}
+    mine = [i for i in items if _s(i.get("file"), 300).removeprefix("./") in changed]
     out = []
-    for i in mine[:12]:
+    for i in mine:
         sev = _s(i.get("severity"), 20).lower()
-        out.append({"file": _s(i.get("file"), 300), "line": _s(i.get("line"), 10), "severity": sev if sev in SEV else "important", "problem": _s(i.get("problem"), 250), "fix": _s(i.get("fix"), 250)})
+        out.append({"file": _s(i.get("file"), 300).removeprefix("./"), "line": _s(i.get("line"), 10), "severity": sev if sev in SEV else "critical", "problem": _s(i.get("problem"), 250), "fix": _s(i.get("fix"), 250)})
+    out.sort(key=lambda f: SEV.index(f["severity"]))
     trig = [_s(x, 150) for x in (obj.get("rollback_triggers") or []) if isinstance(x, str)][:5] if name == "code-reviewer" else []
-    return {"status": "ok", "findings": out, "dropped": len(raw) - len(mine), "rollback_triggers": trig}
+    return {"status": "ok", "findings": out[:12], "dropped": len(items) - len(mine), "rollback_triggers": trig}
 
 
 def rollback(pid, base, head, files, triggers):
@@ -280,6 +284,8 @@ def decide(plan, st, personas, files, small, step_review):
     steps = st["steps"]
     if any(e["status"] != "done" for e in steps.values()):
         blockers.append("harness: chưa đủ bước done (" + ", ".join(f"{k}={e['status']}" for k, e in steps.items() if e["status"] != "done") + ")")
+    if not files:
+        blockers.append("harness: diff gộp rỗng, không có thay đổi nào để ship")
     integ = st.get("integration")
     if not integ or not integ["ok"]:
         blockers.append("harness: kiểm tra tích hợp không đạt" if integ else "harness: không có kiểm tra tích hợp")
@@ -301,8 +307,8 @@ def decide(plan, st, personas, files, small, step_review):
         blockers += [f"{label}: {h}" for h in r["hard"][:6]] + ([f"{label}: còn {r['n_hard'] - 6} chặn nữa"] if r["n_hard"] > 6 else [])
         rec += [f"{label}: {h}" for h in r["soft"][:4]] + ([f"{label}: còn {r['n_soft'] - 4} mục nên xem nữa"] if r["n_soft"] > 4 else [])
     for r in (step_review or {}).get("review", []):
-        if r["severity"] == "high":
-            rec.append(f"review: `{r['file']}:{r['line']}` {r['problem']}")
+        if r["severity"] == "high":  # parse_review kept only files of the diff: a high finding that points at a line is a blocker
+            (blockers if str(r.get("line", "")).isdigit() and int(r["line"]) > 0 else rec).append(f"review: `{r['file']}:{r['line']}` {r['problem']}")
     drift = sorted({p for e in steps.values() for p in e.get("drift", [])})
     if drift:
         rec.append(f"file ngoài kế hoạch được merge: {', '.join(drift[:6])}")
