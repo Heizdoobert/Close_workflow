@@ -2,7 +2,8 @@
 
 Serves POST /v1/messages and POST /v1/chat/completions on 127.0.0.1. The last request's
 headers and parsed body are kept on the server. Set server.fail_next to an HTTP status
-(e.g. 429 or 500) to answer that status once; server.retry_after adds a Retry-After header.
+(e.g. 429 or 500) to answer that status once; server.retry_after adds a Retry-After header;
+server.fail_body replaces the error body.
 """
 
 import json
@@ -48,7 +49,7 @@ class _Handler(BaseHTTPRequestHandler):
         if srv.fail_next is not None:
             status, srv.fail_next = srv.fail_next, None
             extra = {"Retry-After": srv.retry_after} if srv.retry_after is not None else None
-            self._send(status, {"error": "fake failure"}, extra)
+            self._send(status, srv.fail_body, extra)
             return
         self._send(200, reply)
 
@@ -60,6 +61,7 @@ class FakeApi(ThreadingHTTPServer):
         super().__init__(("127.0.0.1", 0), _Handler)
         self.fail_next = None
         self.retry_after = None
+        self.fail_body = {"error": "fake failure"}  # set to echo anything (e.g. a key) back in an error body
         self.last_headers = {}
         self.last_body = None
         self.last_path = None
