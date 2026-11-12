@@ -27,7 +27,7 @@
   {
    "id": 1,
    "type": "stat",
-   "title": "Tasks executed",
+   "title": "Runs (exec, plan, API calls)",
    "datasource": {
     "type": "loki",
     "uid": "${ds}"
@@ -44,7 +44,7 @@
       "type": "loki",
       "uid": "${ds}"
      },
-     "expr": "sum(count_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json [$__range]))",
+     "expr": "sum(count_over_time({job=\"flow\"} |~ `\"event\": \"(exec|plan|api)\"` | json [$__range]))",
      "legendFormat": "",
      "queryType": "instant",
      "refId": "A"
@@ -84,7 +84,7 @@
       "type": "loki",
       "uid": "${ds}"
      },
-     "expr": "sum(count_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json | status=\"failed\" [$__range]))",
+     "expr": "sum(count_over_time({job=\"flow\"} |~ `\"event\": \"(exec|plan|api)\"` | json | status=\"failed\" [$__range]))",
      "legendFormat": "",
      "queryType": "instant",
      "refId": "A"
@@ -124,7 +124,7 @@
       "type": "loki",
       "uid": "${ds}"
      },
-     "expr": "sum(sum_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json | unwrap cost_usd [$__range]))",
+     "expr": "sum(sum_over_time({job=\"flow\"} |~ `\"event\": \"(exec|plan|api)\"` | json | unwrap cost_usd [$__range]))",
      "legendFormat": "",
      "queryType": "instant",
      "refId": "A"
@@ -164,7 +164,7 @@
       "type": "loki",
       "uid": "${ds}"
      },
-     "expr": "sum(sum_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json | unwrap output_tokens [$__range]))",
+     "expr": "sum(sum_over_time({job=\"flow\"} |~ `\"event\": \"(exec|plan|api)\"` | json | unwrap output_tokens [$__range]))",
      "legendFormat": "",
      "queryType": "instant",
      "refId": "A"
@@ -204,7 +204,7 @@
       "type": "loki",
       "uid": "${ds}"
      },
-     "expr": "sum(sum_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json | unwrap cost_usd [$__interval]))",
+     "expr": "sum(sum_over_time({job=\"flow\"} |~ `\"event\": \"(exec|plan|api)\"` | json | unwrap cost_usd [$__interval]))",
      "legendFormat": "cost",
      "queryType": "range",
      "refId": "A"
@@ -237,7 +237,7 @@
       "type": "loki",
       "uid": "${ds}"
      },
-     "expr": "sum(sum_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json | unwrap cache_read [$__interval]))",
+     "expr": "sum(sum_over_time({job=\"flow\"} |~ `\"event\": \"(exec|plan|api)\"` | json | unwrap cache_read [$__interval]))",
      "legendFormat": "cache read",
      "queryType": "range",
      "refId": "A"
@@ -247,7 +247,7 @@
       "type": "loki",
       "uid": "${ds}"
      },
-     "expr": "sum(sum_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json | unwrap output_tokens [$__interval]))",
+     "expr": "sum(sum_over_time({job=\"flow\"} |~ `\"event\": \"(exec|plan|api)\"` | json | unwrap output_tokens [$__interval]))",
      "legendFormat": "output",
      "queryType": "range",
      "refId": "B"
@@ -280,7 +280,7 @@
       "type": "loki",
       "uid": "${ds}"
      },
-     "expr": "quantile_over_time(0.95, {job=\"flow\"} |= `\"event\": \"exec\"` | json | unwrap duration_ms [$__interval])",
+     "expr": "quantile_over_time(0.95, {job=\"flow\"} |~ `\"event\": \"(exec|plan|api)\"` | json | unwrap duration_ms [$__interval])",
      "legendFormat": "p95",
      "queryType": "range",
      "refId": "A"
@@ -313,7 +313,7 @@
       "type": "loki",
       "uid": "${ds}"
      },
-     "expr": "sum by (status) (count_over_time({job=\"flow\"} |= `\"event\": \"exec\"` | json [$__interval]))",
+     "expr": "sum by (status) (count_over_time({job=\"flow\"} |~ `\"event\": \"(exec|plan|api)\"` | json [$__interval]))",
      "legendFormat": "{{status}}",
      "queryType": "range",
      "refId": "A"
@@ -346,7 +346,7 @@
       "type": "loki",
       "uid": "${ds}"
      },
-     "expr": "{job=\"flow\"} |= `\"event\": \"exec\"` | json",
+     "expr": "{job=\"flow\"} |~ `\"event\": \"(exec|plan|api)\"` | json",
      "legendFormat": "",
      "queryType": "range",
      "refId": "A"

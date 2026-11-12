@@ -1,6 +1,6 @@
 """Sub-agent backends (claude, agy, opencode) behind one call with retry, backoff and fallback.
 
-A backend spec is "claude:haiku", "claude:sonnet", "agy[:model-id]" or "opencode[:provider/model]".
+A backend spec is "claude:haiku", "claude:sonnet", "agy[:model-id]", "opencode[:provider/model]" or "api:<provider>/<model>" (HTTP, see api.py).
 Suffix "!" pins the model: persistent retries, resume of the same conversation, and NEVER a fallback to another model.
 Suffix "+" prefers the model with persistent retries, then (only if it truly cannot be called) the next spec runs.
 Transient failures (503/529/429/timeouts/connection resets) are retried with exponential backoff;
@@ -68,6 +68,8 @@ class Opts:
     timeout: int = 600
     resume: str = ""
     on_group: object = None  # called with the agent's process group id right after it starts (plan.py records it for recover)
+    prompt_only: bool = False  # True: the prompt holds everything the call needs, no repo access. Only the api backend reads it (it has no tools)
+    token_cap: int = 0  # api only: most tokens this call may spend (estimated input + max_tokens). 0 = no cap. CLI backends cannot be capped mid-call, so one running call can overshoot a plan's token budget
 
 
 def claude_bin():
@@ -367,7 +369,12 @@ def run_opencode(model, prompt, o):
     return Result(True, "".join(texts).strip(), cost, tok, backend="opencode")
 
 
-BACKENDS = {"claude": run_claude, "agy": run_agy, "opencode": run_opencode}
+def run_api(model, prompt, o):
+    from flow_engine import api  # lazy: api.py imports Result from this module
+    return api.run_api(model, prompt, o)
+
+
+BACKENDS = {"claude": run_claude, "agy": run_agy, "opencode": run_opencode, "api": run_api}
 
 
 def policy_chain(parent_model, role="code"):
@@ -391,6 +398,9 @@ def chain_from_env(default="claude:haiku", parent_model=None, role="code"):
     for s in chain or [default]:
         if s not in out:
             out.append(s)
+    api_rung = os.environ.get(f"FLOW_POLICY_API_{role.upper()}")  # optional last rung per role; unset = no change
+    if api_rung and api_rung.strip() not in out:
+        out.append(api_rung.strip())
     return out
 
 
@@ -432,13 +442,17 @@ def call(chain, prompt, o, trace=None, sleep=time.sleep):
             # pinned/preferred: any error that a retry could cure is retried; others only when transient
             retryable = (res.transient or (pinned or prefer)) and not permanent
             if retryable and attempt < limit:
-                delay = min(ceiling, base * 2 ** attempt) * (0.5 + random.random() / 2)
+                backoff = min(ceiling, base * 2 ** attempt) * (0.5 + random.random() / 2)
+                delay = min(ceiling, max(backoff, res.retry_after))
                 if res.session:  # agy: continue the same conversation instead of starting over
                     oo = replace(o, resume=res.session)
                     prompt_now = "Your previous turn was interrupted by an error. Continue exactly where you stopped and finish the task."
                 trace.append({**ev, "action": f"retry in {delay:.1f}s" + (" (same conversation)" if res.session else "")})
                 sleep(delay)
                 continue
+            if res.budget:
+                trace.append({**ev, "action": "token budget used up: no fallback to a backend that cannot be capped"})
+                return last, spent, tokens
             if pinned:
                 trace.append({**ev, "action": "pinned model: no fallback to another model" + (" (permanent error)" if permanent else " (retries exhausted)")})
                 return last, spent, tokens

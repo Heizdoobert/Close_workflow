@@ -468,11 +468,34 @@ def clean(older_than_days=None, result_branches=False):
     return out
 
 
+TOKEN_SPENT = "plan token budget used up"
+BILLED_TOKENS = ("input_tokens", "cache_create", "output_tokens", "thinking")  # always billed; cache_read only with FLOW_BUDGET_CACHE_READ=1
+
+
+def _token_budget():
+    """FLOW_PLAN_MAX_TOKENS: billable tokens one plan may spend. 0 (the default) means no token budget."""
+    return int(os.environ.get("FLOW_PLAN_MAX_TOKENS") or 0)
+
+
+def billable(tokens):
+    """Tokens the budget counts: fresh input, cache writes, output and thinking. Cache reads are billed at a fraction, so they count only when FLOW_BUDGET_CACHE_READ=1."""
+    n = sum(tokens.get(k, 0) for k in BILLED_TOKENS)
+    return n + (tokens.get("cache_read", 0) if os.environ.get("FLOW_BUDGET_CACHE_READ") == "1" else 0)
+
+
+def _token_summary(st):
+    """The plan's token totals as plan.status and the report show them. budget and left are None when no token budget is set."""
+    t, budget = st.get("tokens", {}), _token_budget()
+    used = billable(t)
+    return {"billable": used, "cache_read": t.get("cache_read", 0), "budget": budget or None, "left": budget - used if budget else None}
+
+
 def status(pid):
     d, plan, state = load(pid)
     hb = state.get("heartbeat")
     return {"id": pid, "status": state["status"], "steps": {k: v["status"] for k, v in state["steps"].items()},
             "cost_usd": round(state.get("cost_usd", 0) + state.get("plan_cost_usd", 0), 6),
+            "tokens": _token_summary(state),
             "heartbeat_age_s": round(time.time() - hb) if hb and state["status"] == "running" else None,
             "report": str(d / "report.md") if (d / "report.md").is_file() else None}
 
@@ -488,6 +511,7 @@ class Ctx:
         self.budget = float(os.environ.get("FLOW_PLAN_MAX_USD", "3.0"))
         self.step_usd = float(os.environ.get("FLOW_STEP_USD", "0.40"))  # per-step estimate: what a launch reserves from the budget
         self.reserved = {}  # sid -> USD still reserved for that running step (spent is taken off it as the step pays)
+        self.token_budget = _token_budget()  # 0 = off
 
     def save(self):
         for _ in range(5):
@@ -518,6 +542,22 @@ class Ctx:
     def free(self):
         """USD neither spent nor reserved by a running step. Caller holds slock."""
         return self.budget - self.spent - sum(self.reserved.values())
+
+    def _left(self):
+        """Billable tokens the plan may still spend; None when no token budget is set. Caller holds slock."""
+        if not self.token_budget:
+            return None
+        return self.token_budget - billable(self.state.get("tokens", {}))
+
+    def tokens_left(self):
+        with self.slock:
+            return self._left()
+
+    def token_cap(self, parts=1):
+        """The per-call token cap for a prompt-only call: what is left, split over the calls that run in parallel. 0 = no token budget.
+        Never below 1 (a spent budget), so run_api refuses the call before any request."""
+        left = self.tokens_left()
+        return 0 if left is None else max(1, left // parts)
 
     @property
     def spent(self):
@@ -663,6 +703,10 @@ def do_step(ctx, step, rescued=False):
         cap = ctx.cap(sid)  # this step's reservation, minus what it has already paid
         if cap <= 0:
             error = f"plan budget ${ctx.budget} exhausted"
+            break
+        left = ctx.tokens_left()
+        if left is not None and left <= 0:
+            error = TOKEN_SPENT
             break
         started = []  # agent process groups this call starts: dropped from state once the call returns
         o = agents.Opts(str(wt), agents.WRITE_TOOLS, cap, int(os.environ.get("FLOW_TIMEOUT", "600")), on_group=lambda g: _track_group(ctx, ev, g, started))
@@ -820,6 +864,10 @@ def run(pid):
                     if len(futures) >= par:
                         break
                     with ctx.slock:  # reserve the per-step estimate before launch, so parallel steps cannot together overshoot the budget
+                        left = ctx._left()
+                        if left is not None and left <= 0:
+                            state["steps"][s["id"]].update(status="failed", error=TOKEN_SPENT)
+                            continue
                         if ctx.free() < ctx.step_usd:
                             if futures:
                                 break  # running steps release their reservation when they finish
@@ -889,6 +937,12 @@ def plan_audit(ctx, kind):
     return {"status": "ok", "hard": r["hard"][:15], "soft": r["soft"][:15], "n_hard": len(r["hard"]), "n_soft": len(r["soft"])}
 
 
+def _tokens_out(ctx):
+    """True when a token budget is on and nothing is left of it."""
+    left = ctx.tokens_left()
+    return left is not None and left <= 0
+
+
 def scout_pass(ctx):
     """The hands for the head: when code steps run on a cheaper model than the deciding one (Gemini parent: GPT-OSS), that model reads the merged result once
     and gathers quoted facts; review and the SHIP personas decide on those instead of each re-reading the repository. Every quote is checked against the file in
@@ -899,6 +953,8 @@ def scout_pass(ctx):
         cap = min(float(os.environ.get("FLOW_SCOUT_USD", "0.10")), ctx.free())
     if cap < 0.02:
         return {"status": "not_run", "error": "plan budget used up"}
+    if _tokens_out(ctx):
+        return {"status": "not_run", "error": TOKEN_SPENT}
     wt, base = str(ctx.plan_wt), ctx.plan["base"]
     changed = git(wt, "diff", "--name-only", f"{base}..HEAD").stdout.splitlines()
     res, cost, tok = agents.call(ctx.code_chain, method.scout_prompt(ctx.plan["goal"], (ctx.plan.get("analysis") or {}).get("spec", ""), changed), agents.Opts(wt, agents.READ_TOOLS, cap, 300), [])
@@ -939,11 +995,14 @@ def review_pass(ctx):
         cap = min(float(os.environ.get("FLOW_REVIEW_USD", "0.15")), ctx.free())
     if cap < 0.02:
         return {"status": "not_run", "error": "plan budget used up"}
+    if _tokens_out(ctx):
+        return {"status": "not_run", "error": TOKEN_SPENT}
     wt, base = str(ctx.plan_wt), ctx.plan["base"]
     changed = git(wt, "diff", "--name-only", f"{base}..HEAD").stdout.splitlines()
     diff = method.cap_diff(redact_shapes(git(wt, "diff", f"{base}..HEAD").stdout), int(os.environ.get("FLOW_REVIEW_BYTES", "30000")))
     try:
-        data = _json_call(ctx, ctx.chain, method.review_prompt(ctx.plan["goal"], (ctx.plan.get("analysis") or {}).get("spec", ""), changed, diff, _facts(ctx)), agents.Opts(wt, agents.READ_TOOLS, cap, 300), "review")
+        data = _json_call(ctx, ctx.chain, method.review_prompt(ctx.plan["goal"], (ctx.plan.get("analysis") or {}).get("spec", ""), changed, diff, _facts(ctx)),
+                          agents.Opts(wt, agents.READ_TOOLS, cap, 300, prompt_only=True, token_cap=ctx.token_cap()), "review")
         return method.parse_review(data, set(changed))
     except PlanError as e:
         return {"status": "not_run", "error": f"review reply unusable: {e}"[:500]}
@@ -972,8 +1031,11 @@ def ship_pass(ctx):
         def one(name):
             if cap < 0.02:
                 return {"status": "not_run", "error": "plan budget used up"}
-            try:
-                data = _json_call(ctx, ctx.chain, method.persona_prompt(name, ctx.plan["goal"], spec, changed, diff, facts), agents.Opts(wt, agents.READ_TOOLS, cap, 300), f"ship:{name}")
+            if _tokens_out(ctx):
+                return {"status": "not_run", "error": TOKEN_SPENT}
+            try:  # the three personas run at once: each gets a third of what is left, so they cannot together overshoot it
+                data = _json_call(ctx, ctx.chain, method.persona_prompt(name, ctx.plan["goal"], spec, changed, diff, facts),
+                                  agents.Opts(wt, agents.READ_TOOLS, cap, 300, prompt_only=True, token_cap=ctx.token_cap(parts=len(method.PERSONAS))), f"ship:{name}")
                 return method.parse_persona(name, data, set(changed))
             except Exception as e:  # one persona failing must not hide the others
                 return {"status": "not_run", "error": f"{type(e).__name__}: {e}"[:500]}
@@ -1108,10 +1170,26 @@ def report(pid):
     if agg:
         L += ["", "## Token theo vai trò", "", "| Vai trò | Backend | Lượt | Input | Cache đọc | Output | Suy nghĩ |", "|---|---|---|---|---|---|---|"]
         L += [f"| {r} | {b} | {a[0]} | {a[1]} | {a[2]} | {a[3]} | {a[4]} |" for (r, b), a in agg.items()]
+    L += _token_md(st)
     L += ["", "## Cách review", f"- `git diff {plan['base'][:10]}..flow/{pid}` xem toàn bộ thay đổi", f"- `git merge flow/{pid}` khi đồng ý; `git worktree remove plans/{pid}/wt/_plan` để dọn"]
     (d / "report.md").write_text(redact("\n".join(L) + "\n"), encoding="utf-8")
     _atomic(d / "report.json", json.dumps(redact_obj({"plan": plan, "state": st}), indent=2, ensure_ascii=False))
     return d / "report.md"
+
+
+def _token_md(st):
+    """## Token tổng: the total the budget counts, the cache reads, and the billable split per backend."""
+    s = _token_summary(st)
+    per = {}
+    for c in st.get("calls", []):
+        b = c.get("backend") or "(không rõ)"
+        per[b] = per.get(b, 0) + billable(c)
+    L = ["", "## Token tổng", "", f"- billable (input + ghi cache + output + suy nghĩ{' + đọc cache' if os.environ.get('FLOW_BUDGET_CACHE_READ') == '1' else ''}): {s['billable']}",
+         f"- đọc cache: {s['cache_read']}"]
+    L += [f"- backend `{b}`: {n}" for b, n in per.items()]
+    if s["budget"]:
+        L += [f"- ngân sách: {s['budget']} token, còn {s['left']}, đã dùng {100 * s['billable'] / s['budget']:.1f}%"]  # no 'token:' here: redact() would mask the number
+    return L
 
 
 def _next_action(pid, st, d):
