@@ -109,3 +109,10 @@ Commands you will use: `flow-task where` (state and next action), `show <plan>`,
 - What the user must do, if anything: restart Claude Code / Claude Desktop / Cursor / Antigravity so the MCP server loads; anything you could not install without admin rights.
 - How to use it: write `task:[what you want]` in an agent; it plans, shows the plan, waits for the user's OK, then runs in git worktrees and returns `plans/<id>/report.md` plus branch `flow/<id>`.
 - Not verified on this OS: say so if the OS is Windows or macOS and anything above failed or was skipped.
+
+## API mode (optional, off unless you set a key)
+- CLI mode stays the default. A chain entry `api:anthropic/<model>` or `api:openai/<model>` uses an API key instead of a CLI login.
+- Env vars (set the value yourself, never paste a key into a file or a task): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `FLOW_API_BASE_URL` (optional endpoint override), `FLOW_PRICE_<MODEL>` (your own price per million tokens; without it the cost is unknown, never 0), `FLOW_POLICY_API_<ROLE>` (optional extra rung), `FLOW_API_CACHE=1` (retry cache, off by default).
+- A missing key means the chain falls through to the next backend; it is not an error that stops the plan.
+- **Limit:** API mode serves only roles that need no tools (planner, interview, review, SHIP personas). map, steps and scout stay on CLI, and a call that asks for write tools is refused. Read-only map and scout calls are not yet refused at the chain level: they would get a plain completion with no tools, so keep them on CLI. The tool loop does not exist yet.
+- `flow-task doctor` shows which modes are usable without printing a key.
