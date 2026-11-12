@@ -1,6 +1,9 @@
 """API wire client against the fake server: parsing, usage mapping, error classes, no key in errors."""
 
+import contextlib
+import http.server
 import socket
+import threading
 
 import pytest
 
@@ -16,6 +19,17 @@ def server():
     yield srv
     srv.shutdown()
     srv.server_close()
+
+
+@contextlib.contextmanager
+def _local_http(handler):
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{srv.server_address[1]}"
+    finally:
+        srv.shutdown()
+        srv.server_close()
 
 
 def test_anthropic_call_parses_text_usage_and_sends_headers(server):
@@ -88,3 +102,97 @@ def test_unreachable_base_is_transient_with_class_name_only():
     assert info.value.status is None
     assert str(info.value) in ("URLError", "ConnectionRefusedError")
     assert KEY not in str(info.value)
+
+
+class _Target(http.server.BaseHTTPRequestHandler):
+    hits = []
+
+    def log_message(self, fmt, *args):
+        pass
+
+    def do_POST(self):
+        length = int(self.headers.get("content-length", 0))
+        self.rfile.read(length)
+        _Target.hits.append({k.lower(): v for k, v in self.headers.items()})
+        self.send_response(200)
+        self.send_header("content-length", "0")
+        self.end_headers()
+
+
+def test_redirect_is_refused_and_key_never_reaches_target():
+    _Target.hits = []
+    with _local_http(_Target) as target_base:
+
+        class Redirector(http.server.BaseHTTPRequestHandler):
+            def log_message(self, fmt, *args):
+                pass
+
+            def do_POST(self):
+                length = int(self.headers.get("content-length", 0))
+                self.rfile.read(length)
+                self.send_response(302)
+                self.send_header("Location", target_base + "/v1/messages")
+                self.send_header("content-length", "0")
+                self.end_headers()
+
+        with _local_http(Redirector) as redirect_base:
+            with pytest.raises(apiclient.ApiError) as info:
+                apiclient.request(redirect_base + "/v1/messages", {"x-api-key": KEY}, {"a": 1}, 5)
+    assert info.value.status == 302
+    assert info.value.transient is False
+    assert _Target.hits == []
+    assert KEY not in str(info.value)
+
+
+def test_plain_http_to_remote_host_is_refused_before_any_socket(monkeypatch):
+    opened = []
+    monkeypatch.setattr(socket, "create_connection", lambda *a, **k: opened.append(a))
+    with pytest.raises(apiclient.ApiError) as info:
+        apiclient.request("http://example.com/v1/messages", {"x-api-key": KEY}, {"a": 1}, 5)
+    assert str(info.value) == "invalid argument: api base url must be https"
+    assert info.value.transient is False
+    assert opened == []
+
+
+def test_body_over_max_bytes_is_permanent(monkeypatch):
+    monkeypatch.setenv("FLOW_API_MAX_BYTES", "100")
+
+    class Big(http.server.BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            pass
+
+        def do_POST(self):
+            length = int(self.headers.get("content-length", 0))
+            self.rfile.read(length)
+            self.send_response(200)
+            self.send_header("content-length", "200")
+            self.end_headers()
+            self.wfile.write(b"x" * 200)
+
+    with _local_http(Big) as base:
+        with pytest.raises(apiclient.ApiError) as info:
+            apiclient.request(base + "/v1/messages", {"x-api-key": KEY}, {"a": 1}, 5)
+    assert str(info.value) == "invalid argument: response over FLOW_API_MAX_BYTES"
+    assert info.value.transient is False
+
+
+def test_truncated_body_is_transient_incomplete_read():
+    class Truncated(http.server.BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            pass
+
+        def do_POST(self):
+            length = int(self.headers.get("content-length", 0))
+            self.rfile.read(length)
+            self.send_response(200)
+            self.send_header("content-length", "1000")
+            self.end_headers()
+            self.wfile.write(b'{"a":')
+            self.wfile.flush()
+            self.close_connection = True
+
+    with _local_http(Truncated) as base:
+        with pytest.raises(apiclient.ApiError) as info:
+            apiclient.request(base + "/v1/messages", {"x-api-key": KEY}, {"a": 1}, 5)
+    assert str(info.value) == "IncompleteRead"
+    assert info.value.transient is True
