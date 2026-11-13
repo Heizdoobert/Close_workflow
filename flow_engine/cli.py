@@ -10,7 +10,7 @@ from flow_engine import __version__, agents, bridge, doctor_api, engine, gate, i
 from flow_engine.resp import RedisError
 
 USAGE = ('usage: flow-task "<task message>"      store a task (with FLOW_EXEC=1 also run it)\n'
-         '       flow-task enqueue "<message>"   store + queue for the listener, prints the id\n'
+         '       flow-task enqueue "<message>" [--model <your model id>]   store + queue for the listener, prints the id\n'
          "       flow-task status <id> | listen | gate [dir] | doctor | exec <id> <message>\n"
          '       flow-task plan "<goal>" [--model <your model id>] [--brief FILE --confirmed]   draft a plan (nothing runs until approve)\n'
          '       flow-task selftest [--model ID] [--keep]   run the whole plan flow once in a throwaway repo (real agents, about 0.03 USD) and print OK/FAIL per check\n'
@@ -101,6 +101,7 @@ def main(argv=None):
             return 0 if res["ok"] else 1
         if cmd == "plan" and rest:
             model, goal, brief = _opt(rest, "--model"), _goal(rest), None
+            agents.require_model(model)
             if _opt(rest, "--brief"):
                 brief = json.loads(open(_opt(rest, "--brief"), encoding="utf-8").read())
                 brief["confirmed"] = "--confirmed" in rest  # only the user's yes may set this
@@ -169,14 +170,15 @@ def main(argv=None):
             print(json.dumps(engine.status(rest[0]), ensure_ascii=False))
             return 0
         if cmd == "enqueue" and rest:
-            print(engine.enqueue(rest[0]))
+            agents.require_model(_opt(rest, "--model"))
+            print(engine.enqueue(_goal(rest), _opt(rest, "--model")))
             return 0
         if cmd == "exec" and len(rest) == 2:
             ok, rec = engine.execute(rest[0], rest[1])
             print(f"{'done' if ok else 'failed'} task {rest[0]} ({rec['attempts']} attempt(s), ${rec['cost_usd']})")
             return 0 if ok else 1
         tid = engine.submit(a[0])  # anything else is the task message
-    except (plan.PlanError, interview.InterviewError) as e:
+    except (plan.PlanError, interview.InterviewError, ValueError) as e:
         print(f"plan error: {e}", file=sys.stderr)
         return 1
     except (OSError, RedisError) as e:

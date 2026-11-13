@@ -392,6 +392,12 @@ def policy_chain(parent_model, role="code"):
     return []
 
 
+def require_model(parent_model):
+    """FLOW_REQUIRE_MODEL=1: a caller that does not say which model it is gets an error, instead of work that silently runs on the default backend."""
+    if os.environ.get("FLOW_REQUIRE_MODEL") == "1" and not (parent_model or os.environ.get("FLOW_PARENT_MODEL") or os.environ.get("FLOW_BACKENDS")):
+        raise ValueError("FLOW_REQUIRE_MODEL=1: pass --model <your own model id> (e.g. gemini-3.8-flash-high)")
+
+
 def chain_from_env(default="claude:haiku", parent_model=None, role="code"):
     if os.environ.get("FLOW_BACKENDS"):  # an explicit chain always wins
         return [s.strip() for s in os.environ["FLOW_BACKENDS"].split(",") if s.strip()]
