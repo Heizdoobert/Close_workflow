@@ -44,18 +44,18 @@ def log(line):
         f.write(line + "\n")
 
 
-def submit(message):
-    """Store a queued task; returns its id."""
+def submit(message, parent_model=None):
+    """Store a queued task; returns its id. `parent_model` = the caller's own model id: execute() picks the backend from it (agents.policy_chain)."""
     tid = str(time.time_ns())
-    payload = json.dumps({"task_id": tid, "message": message, "status": "queued", "timestamp": now()}, ensure_ascii=False)
+    payload = json.dumps({"task_id": tid, "message": message, "status": "queued", "timestamp": now(), **({"parent_model": parent_model} if parent_model else {})}, ensure_ascii=False)
     redis().call("SET", f"task:{tid}", payload, "EX", TTL)
     log(f"[{now()}] [TASK:{tid}] {message} -> stored")
     return tid
 
 
-def enqueue(message):
+def enqueue(message, parent_model=None):
     """Store a task and drop it in incoming_tasks/ for the listener to execute."""
-    tid = submit(message)
+    tid = submit(message, parent_model)
     INCOMING.mkdir(parents=True, exist_ok=True)
     tmp = INCOMING / f"{tid}.tmp"  # rename so the listener never reads a half-written file
     tmp.write_text(message, encoding="utf-8")
@@ -85,7 +85,14 @@ def execute(tid, message):
     workdir = os.environ.get("FLOW_WORKDIR", str(ROOT))
     budget, gated = float(os.environ.get("FLOW_MAX_USD", "0.50")), os.environ.get("FLOW_GATE") == "1"
     retries, model = int(os.environ.get("FLOW_RETRIES", "2")), os.environ.get("FLOW_MODEL", "haiku")
-    chain, key, r_ = agents.chain_from_env(f"claude:{model}"), f"taskstate:{tid}", redis()
+    key, r_ = f"taskstate:{tid}", redis()
+    try:
+        parent = json.loads(r_.call("GET", f"task:{tid}") or "{}").get("parent_model")
+    except ValueError:
+        parent = None
+    chain = agents.chain_from_env(f"claude:{model}", parent)  # a task is hands-on work: role "code"
+    if parent:
+        model = chain[0]
 
     def hset(**kv):
         r_.call("HSET", key, *[x for k, v in kv.items() for x in (k, v)])

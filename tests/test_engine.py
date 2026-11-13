@@ -154,3 +154,29 @@ def test_listener_keeps_a_task_queued_while_redis_is_down(fake_redis, monkeypatc
     monkeypatch.setattr(engine, "execute", lambda *a: pytest.fail("a task that was never stored must not run"))
     engine._process(path, engine.redis())
     assert path.exists() and not list((engine.INCOMING / "failed").glob("*"))  # still queued, retried on the next poll
+
+
+def test_enqueued_task_follows_the_callers_model_policy(fake_redis, capsys, monkeypatch):
+    for k in ("FLOW_BACKENDS", "FLOW_PARENT_MODEL", "FLOW_REQUIRE_MODEL"):
+        monkeypatch.delenv(k, raising=False)
+    chains = []
+    monkeypatch.setattr(agents, "call", lambda chain, prompt, o, trace=None: (chains.append(chain), (agents.Result(True, "ok", backend=chain[0]), 0.0, {}))[1])
+    monkeypatch.setattr(bridge, "recall", lambda m: "")
+    monkeypatch.setattr(bridge, "learn", lambda *a: None)
+    assert cli.main(["enqueue", "do it", "--model", "gemini-3.8-flash-high"]) == 0
+    tid = capsys.readouterr().out.strip()
+    assert (engine.INCOMING / f"{tid}.txt").read_text(encoding="utf-8") == "do it"
+    engine.execute(tid, "do it")
+    engine.execute(engine.submit("no model given"), "no model given")
+    assert chains == [[f"agy:{agents.GPT_OSS}!"], ["claude:haiku"]]  # Gemini parent: the hands-on work is pinned to GPT-OSS
+    assert engine.status(tid)["model"] == f"agy:{agents.GPT_OSS}!"
+
+
+def test_require_model_refuses_a_caller_that_does_not_name_its_model(fake_redis, capsys, monkeypatch):
+    for k in ("FLOW_BACKENDS", "FLOW_PARENT_MODEL"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("FLOW_REQUIRE_MODEL", "1")
+    monkeypatch.setattr(cli.plan, "create", lambda *a: pytest.fail("a plan was drafted without a model"))
+    assert cli.main(["enqueue", "do it"]) == 1 and cli.main(["plan", "a goal"]) == 1
+    assert "--model" in capsys.readouterr().err and not list(engine.INCOMING.glob("*.txt"))
+    assert cli.main(["enqueue", "do it", "--model", "gemini-3.8-flash-high"]) == 0
