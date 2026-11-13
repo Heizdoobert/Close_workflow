@@ -2,6 +2,10 @@
 
 The plan tests use the fake-agent fixture of test_plan.py (POSIX shell launchers); the API tests use the fake server of test_api_backend.py. No real key."""
 
+import sys
+
+import pytest
+
 from flow_engine import agents, api, plan
 from test_api_backend import server  # the shared fake API server fixture
 from test_plan import env, step  # the shared fake-agent fixture
@@ -21,6 +25,7 @@ def test_billable_counts_billed_kinds_and_cache_reads_only_on_flag(monkeypatch):
     assert plan.billable({}) == 0
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="fake binaries are POSIX scripts")
 def test_no_token_budget_by_default_reports_none_for_budget_and_left(env, monkeypatch):
     monkeypatch.delenv("FLOW_PLAN_MAX_TOKENS", raising=False)
     env.script([step("s1", files=["a.py"], acc="test -f a.py")], {"s1": {"files": {"a.py": "A = 1\n"}}})
@@ -29,6 +34,7 @@ def test_no_token_budget_by_default_reports_none_for_budget_and_left(env, monkey
     assert tok["budget"] is None and tok["left"] is None and tok["billable"] > 0  # the planner call is counted anyway
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="fake binaries are POSIX scripts")
 def test_step_after_the_token_budget_is_spent_fails_with_token_message(env, monkeypatch):
     env.script([step("s1", files=["a.py"], acc="test -f a.py"), step("s2", deps=["s1"], files=["b.py"], acc="test -f b.py")],
                {"s1": {"files": {"a.py": "A = 1\n"}}, "s2": {"files": {"b.py": "B = 2\n"}}})
@@ -59,6 +65,7 @@ def test_api_max_tokens_is_capped_to_what_the_budget_leaves(server, tmp_path):
     assert server.last_body["max_tokens"] == min(4096, 5000 - 200)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="fake binaries are POSIX scripts")
 def test_report_has_token_totals_and_budget_line(env, monkeypatch):
     monkeypatch.setenv("FLOW_PLAN_MAX_TOKENS", "100000")
     env.script([step("s1", files=["a.py"], acc="test -f a.py")], {"s1": {"files": {"a.py": "A = 1\n"}}})

@@ -135,7 +135,7 @@ def _parse(reply, wrap):
         raise InterviewError(str(e))
     try:
         conf = max(0, min(100, int(o.get("confidence"))))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):  # Infinity and 1e999 parse as a float that int() cannot take
         raise InterviewError("confidence must be a number 0-100")
     cov = coverage(o.get("coverage"))
     r = {"confidence": conf, "coverage": cov, "hypothesis": _s(o.get("hypothesis"), 300), "missing": _s(o.get("missing"), 300), "question": _s(o.get("question"), 400), "guess": _s(o.get("guess"), 400), "brief": None}

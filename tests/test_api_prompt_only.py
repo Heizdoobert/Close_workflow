@@ -67,6 +67,7 @@ def test_api_serves_a_prompt_only_call(server, tmp_path):
     assert server.last_path == "/v1/messages"
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="fake binaries are POSIX scripts")
 def test_refused_api_entry_falls_through_to_the_cli_backend(server, fake_claude, tmp_path):
     trace = []
     res, _, _ = agents.call([OPENAI, "claude:haiku"], "planning agent hello", agents.Opts(str(tmp_path), prompt_only=False), trace)

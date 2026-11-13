@@ -157,7 +157,12 @@ def review_prompt(goal, spec, changed, diff, facts=""):
 
 
 def parse_review(obj, changed):
-    """Keep only findings about files that are in the diff (anything else is a guess); count the rest as dropped."""
+    """Keep only findings about files that are in the diff (anything else is a guess); count the rest as dropped.
+    An answer whose `review` is not a list of objects is not the review schema: not_run, never a silent empty 'ok'. An unknown severity counts as high (fail closed)."""
+    items = obj.get("review") if isinstance(obj, dict) else None
+    if not isinstance(items, list) or not all(isinstance(i, dict) for i in items):
+        return {"status": "not_run", "error": "the answer is not the review schema"}
+
     def keep(items, fields):
         ok = [i for i in (items if isinstance(items, list) else []) if isinstance(i, dict)]
         good = [{f: _s(i.get(f), 250) for f in fields} for i in ok if _s(i.get("file"), 300) in changed][:10]
@@ -165,7 +170,7 @@ def parse_review(obj, changed):
     rev, d1 = keep(obj.get("review"), ("file", "line", "severity", "problem", "fix"))
     sim, d2 = keep(obj.get("simplify"), ("file", "what"))
     for r in rev:
-        r["severity"] = r["severity"].lower() if r["severity"].lower() in ("high", "medium", "low") else "medium"
+        r["severity"] = r["severity"].lower() if r["severity"].lower() in ("high", "medium", "low") else "high"
     return {"status": "ok", "review": rev, "simplify": sim, "edge_cases": [_s(x, 150) for x in (obj.get("edge_cases") or []) if isinstance(x, str)][:8], "dropped": d1 + d2}
 
 
@@ -306,6 +311,8 @@ def decide(plan, st, personas, files, small, step_review):
             continue
         blockers += [f"{label}: {h}" for h in r["hard"][:6]] + ([f"{label}: còn {r['n_hard'] - 6} chặn nữa"] if r["n_hard"] > 6 else [])
         rec += [f"{label}: {h}" for h in r["soft"][:4]] + ([f"{label}: còn {r['n_soft'] - 4} mục nên xem nữa"] if r["n_soft"] > 4 else [])
+    if (step_review or {}).get("status") == "not_run":  # advisory, but a review that did not run must not read as a clean one
+        rec.append(f"review: không chạy ({step_review.get('error') or 'không rõ lý do'})")
     for r in (step_review or {}).get("review", []):
         if r["severity"] == "high":  # parse_review kept only files of the diff: a high finding that points at a line is a blocker
             (blockers if str(r.get("line", "")).isdigit() and int(r["line"]) > 0 else rec).append(f"review: `{r['file']}:{r['line']}` {r['problem']}")
