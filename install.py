@@ -77,14 +77,12 @@ def install_packages(agent_src, embed):
     py("-m", "pip", "install", "-q", *target).check_returncode()
 
 
-def write_env(central):
+def write_env():
     env = ROOT / ".env"
     have = env.read_text(encoding="utf-8") if env.exists() else ""
     add = ""
     if "REDIS_PASSWORD=" not in have:
         add += f"REDIS_PASSWORD={secrets.token_urlsafe(24)}\n"
-    if central is not None and "ENABLE_CENTRAL_LOG=" not in have:
-        add += f"ENABLE_CENTRAL_LOG={int(central)}\n"
     if add:
         env.write_text(have + ("\n" if have and not have.endswith("\n") else "") + add, encoding="utf-8")
         try:
@@ -101,16 +99,14 @@ def compose_cmd():
     return ["docker-compose"] if shutil.which("docker-compose") else None
 
 
-def start_docker(env, central):
+def start_docker(env):
     cmd = compose_cmd()
     if not cmd or run(["docker", "info"], capture_output=True).returncode != 0:
         say("Docker not available: start Redis yourself and set REDIS_HOST/REDIS_PORT/REDIS_PASSWORD in .env")
         return
     run_env = {**os.environ, "REDIS_PASSWORD": env["REDIS_PASSWORD"]}
-    files = ["docker-compose.yml"] + (["docker-compose-logging.yml"] if central else [])
-    for f in files:
-        run([*cmd, "-f", ROOT / f, "up", "-d"], env=run_env, cwd=ROOT).check_returncode()
-    say("containers up: Redis" + (" + Loki/Promtail/Grafana (http://localhost:3000)" if central else ""))
+    run([*cmd, "-f", ROOT / "docker-compose.yml", "up", "-d"], env=run_env, cwd=ROOT).check_returncode()
+    say("containers up: Redis")
 
 
 def persist_win_path(d):
@@ -227,7 +223,6 @@ def main():
     ap.add_argument("--no-agent-system", action="store_true", help="task engine only")
     ap.add_argument("--no-embed", action="store_true", help="skip fastembed (BM25 memory only)")
     ap.add_argument("--no-docker", action="store_true")
-    ap.add_argument("--no-central-log", action="store_true", help="Redis only, no Loki/Grafana")
     ap.add_argument("--service", action="store_true", help="start the listener at login")
     ap.add_argument("--full", action="store_true", help="agent mode: also rules blocks, Claude Code MCP, persistent PATH on Windows (no manual step left)")
     a = ap.parse_args()
@@ -235,12 +230,11 @@ def main():
         sys.exit("Python 3.9+ required")
 
     src = None if a.no_agent_system else find_agent_src(a.agent_system)
-    central = not a.no_central_log
     make_venv()
     install_packages(src, not a.no_embed)
-    env = write_env(central if not a.no_docker else None)
+    env = write_env()
     if not a.no_docker:
-        start_docker(env, env.get("ENABLE_CENTRAL_LOG") == "1")
+        start_docker(env)
     for d in ("incoming_tasks/processed", "incoming_tasks/failed", "logs"):
         (ROOT / d).mkdir(parents=True, exist_ok=True)
     link_shims(a.full)

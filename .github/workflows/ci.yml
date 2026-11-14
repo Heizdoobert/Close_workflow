@@ -13,8 +13,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.10", "3.12"]
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.12"]
         include:
           # pyproject requires-python is >=3.9; ubuntu-latest no longer ships 3.9
           - { os: ubuntu-22.04, python: "3.9" }

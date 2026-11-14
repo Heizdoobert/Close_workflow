@@ -14,7 +14,7 @@ from flow_engine.resp import Redis, RedisError
 ROOT = Path(os.environ.get("FLOW_HOME") or Path(__file__).resolve().parent.parent)
 INCOMING, LOGS = ROOT / "incoming_tasks", ROOT / "logs"
 LOG = LOGS / "flow_engine.log"
-TTL = int(os.environ.get("TASK_TTL", "2592000"))
+TTL = 30 * 24 * 3600  # task:<id> lives 30 days
 
 
 def load_env():

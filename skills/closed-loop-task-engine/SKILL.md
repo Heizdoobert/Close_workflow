@@ -21,4 +21,4 @@ Single task (no plan): `flow_task_submit` with `message` and `model` = your own 
 
 Model rule: if your model is GPT-OSS 120B the sub-agents stay on GPT-OSS 120B (pinned, never another model). If it is Gemini Flash: code steps try GPT-OSS 120B first, then Gemini; planning, non-code steps, review and SHIP stay on Gemini. FLOW_SKILL does this from the `model` you pass.
 
-Logs: `<FLOW_SKILL repo>/logs/` -> Loki -> Grafana `http://localhost:3000` (`{job="flow"}`).
+Logs: `<FLOW_SKILL repo>/logs/flow_engine.log` (JSON lines).

@@ -276,7 +276,7 @@ def parse_persona(name, obj, changed):
 def rollback(pid, base, head, files, triggers):
     """Mandatory before any GO: when to roll back, the exact commands, and an honest recovery estimate."""
     risky = [f for f in files if INFRA_PATH.search(f)]
-    return {"triggers": (triggers or []) + ["test hoặc acceptance của plan fail sau khi merge", "lỗi mới trong log liên quan tới file đã đổi (Loki {job=\"flow\"})"],
+    return {"triggers": (triggers or []) + ["test hoặc acceptance của plan fail sau khi merge", "lỗi mới trong logs/flow_engine.log liên quan tới file đã đổi"],
             "procedure": [f"chưa merge: `git branch -D flow/{pid}` (nhánh của bạn chưa bị đụng)", f"đã merge bằng merge commit: `git revert -m 1 <merge-commit>`",
                           f"đã fast-forward: `git revert --no-edit {base[:10]}..{head or 'flow/' + pid}`"],
             "rto": "vài phút: chỉ cần lệnh git" if not risky else f"git không đủ: {', '.join(risky[:4])} là cấu hình, hạ tầng hoặc dữ liệu, phải hoàn tác tay thêm"}

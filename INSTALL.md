@@ -1,12 +1,12 @@
 # Install
 
-Works on Linux, macOS and Windows. Needs Python 3.9+ and, for Redis/Grafana, Docker. Nothing else: the engine is stdlib Python (no `redis-cli`, no `inotify`, no bash on Windows).
+Works on Linux, macOS and Windows. Needs Python 3.9+ and, for Redis, Docker. Nothing else: the engine is stdlib Python (no `redis-cli`, no `inotify`, no bash on Windows).
 
 Two projects, one system:
 
 | Project | Role |
 | --- | --- |
-| **FLOW_SKILL** (this repo) | task queue (Redis), cheap `claude -p` worker, scripted gates, Loki/Grafana logs |
+| **FLOW_SKILL** (this repo) | task queue (Redis), cheap `claude -p` worker, scripted gates, JSON-line logs |
 | **Agent_system** (`../Agent_system`) | memory (SQLite + embeddings), critic/reflection, MCP server |
 
 `install.py` installs both into one venv (`.venv`) and wires them together.
@@ -22,7 +22,7 @@ cd FLOW_SKILL
 .\install.ps1           # Windows (PowerShell)
 ```
 
-Flags (same for both): `--service` start the listener at login · `--no-docker` skip containers · `--no-central-log` Redis only, no Loki/Grafana · `--no-embed` BM25 memory only (skips the ~200 MB fastembed download) · `--agent-system PATH_OR_URL` Agent_system elsewhere (`AGENT_SYSTEM_URL` changes the clone source) · `--no-agent-system` task engine only.
+Flags (same for both): `--service` start the listener at login · `--no-docker` skip containers · `--no-embed` BM25 memory only (skips the ~200 MB fastembed download) · `--agent-system PATH_OR_URL` Agent_system elsewhere (`AGENT_SYSTEM_URL` changes the clone source) · `--no-agent-system` task engine only.
 
 What it does, in order: venv → `pip install -e` both projects → `.env` with a random Redis password → `docker compose up -d` → `flow-task` and `agent-system` on PATH (Linux/macOS: symlinks in `~/.local/bin`; Windows: prints one PATH command) → registers the MCP server in Claude Desktop, Cursor, Windsurf, Antigravity → optional listener service (systemd `--user`, launchd, Task Scheduler) → `flow-task doctor`.
 

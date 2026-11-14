@@ -39,8 +39,8 @@ def test_secrets_job_runs_gitleaks_action():
     assert "gitleaks/gitleaks-action@v2" in text
 
 
-def test_dependabot_covers_actions_and_pip_weekly():
+def test_dependabot_covers_actions_weekly():
+    # pip is not listed: pyproject has no runtime dependencies to bump.
     text = DEPENDABOT.read_text(encoding="utf-8")
     assert 'package-ecosystem: "github-actions"' in text
-    assert 'package-ecosystem: "pip"' in text
-    assert text.count('interval: "weekly"') == 2
+    assert 'interval: "weekly"' in text

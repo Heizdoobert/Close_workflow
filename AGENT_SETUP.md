@@ -14,7 +14,7 @@ Run and note the results:
 ```
 python3 --version || python --version || py --version     # need 3.9+
 git --version
-docker --version && docker info                            # optional: Redis/Grafana containers
+docker --version && docker info                            # optional: Redis container
 claude --version                                           # Claude Code CLI, optional
 ```
 - Python or git missing: install them with the OS package manager if you can without admin rights (`winget install Python.Python.3.12 Git.Git`, `brew install python git`, `apt install python3 python3-venv git`). If it needs admin or a GUI, stop and tell the user exactly what to install (the only allowed manual step).
@@ -29,7 +29,7 @@ Windows (PowerShell):
 ```
 py install.py --full
 ```
-Useful extras: `--service` (listener starts at login), `--no-embed` (skip the ~200 MB fastembed download), `--no-central-log` (Redis only, no Loki/Grafana), `--no-docker`, `--agent-system PATH_OR_URL`.
+Useful extras: `--service` (listener starts at login), `--no-embed` (skip the ~200 MB fastembed download), `--no-docker`, `--agent-system PATH_OR_URL`.
 
 `--full` does: venv -> install both projects -> `.env` with a random Redis password -> containers -> `flow-task`/`agent-system` on PATH (Windows: persisted in the user PATH) -> MCP registered in Claude Desktop, Cursor, Windsurf, Antigravity and Claude Code (user scope) -> the `task:[...]` block written into the Gemini, Cursor, Antigravity, Claude Code and OpenCode rules files -> the Claude skill copied to `~/.claude/skills/closed-loop-task-engine/`.
 

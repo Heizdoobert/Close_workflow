@@ -1,22 +1,10 @@
 # FLOW_SKILL — chi tiết kiến trúc (chuyển từ ~/.claude/CLAUDE.md)
 
-## Tri-Modal Token Economics
-- **Tier 0 (0-token)**: Code thuần, DuckDB local, streaming RFC 4180 `QuoteAwareChunker`.
-- **Tier 1 (Real-time LLM)**: SLA < 12h, interactive loops, code direct edit.
-- **Tier 2 (Batch API -50% cost)**: >5M tokens, batch offline không khẩn cấp.
-
-## Resilient Distributed Queue
-- Celery invariants: `task_acks_late=True`, `visibility_timeout=86400`, `worker_prefetch_multiplier=1`.
-- Circuit Breaker: tự ngắt & retry an toàn, chống silent data loss.
-
-## 3-Tier Memory Layer
-- **Tier 1 (Vector)**: Milvus Lite 3.0.2 + BLAKE3 UID + SourceChunkPointer.
-- **Tier 2 (Storage)**: Knowledge Base / Object Store + Hybrid Search (BM25 + Dense).
-- **Tier 3 (Graph/Relational)**: SQLiteStore WAL (`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;`).
+Celery queue, Milvus/DuckDB data pipeline và memory layer thuộc `../Agent_system` (xem `Agent_system/CLAUDE.md`), không có trong repo này.
 
 ## Closed-Loop Task Engine (đầy đủ)
 1. **Persistence**: `/usr/local/bin/flow-task "<nội dung>"` -> Redis `localhost:6379`, key `task:<timestamp>` (TTL 30 ngày, field `status`).
-2. **Observability**: log vào `/mnt/second_drive/FLOW_SKILL/logs/` -> Promtail -> Loki -> Grafana `http://localhost:3000`, nhãn `job="flow"`.
+2. **Observability**: JSON lines trong `logs/flow_engine.log` của repo; trạng thái plan: `flow-task where <plan>`, `plans/<plan>/STATUS.md`.
 3. **Pipeline đầy đủ** (chỉ cho task tính năng/sửa lỗi lớn): `spec -> plan -> build -> test -> review -> constraints -> code-verification -> simplify -> security -> ship`, thẩm định Judge/Critic/Prover.
 
 ## Cross-OS engine + agent-system wiring (Phase 7)

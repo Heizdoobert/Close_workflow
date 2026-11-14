@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `pyproject.toml` declares the MIT license.
 
+### Removed
+
+- Loki, Promtail and Grafana (`docker-compose-logging.yml`, `loki/`, `promtail/`, `grafana/`, `install.py --no-central-log`). Logs stay in `logs/flow_engine.log` as JSON lines.
+- `legacy/` and its layout test. Git history keeps the files.
+- CI matrix cut from 7 legs to 3 (ubuntu 3.12, windows 3.12, ubuntu-22.04 3.9); macOS and 3.10 legs dropped. Dependabot no longer watches pip (no runtime dependencies).
+
 ## [0.5.0]
 
 ### Added

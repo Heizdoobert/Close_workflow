@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "flow-engine"
 version = "0.5.0"
-description = "Closed-loop task engine: Redis queue, cheap claude -p worker, scripted gates, Loki/Grafana logs"
+description = "Closed-loop task engine: Redis queue, cheap claude -p worker, scripted gates, JSON-line logs"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 dependencies = []
