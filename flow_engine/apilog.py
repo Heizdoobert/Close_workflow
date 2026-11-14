@@ -1,4 +1,4 @@
-"""One JSON line per API attempt, written to the flow log (job="flow" in Loki) so Grafana can chart API calls.
+"""One JSON line per API attempt, written to the flow log (logs/flow_engine.log) so API calls can be counted and costed.
 
 The line carries counts, cost, latency and status only: no prompt, no answer and no key. Its fields are fixed by line().
 """
