@@ -4,6 +4,7 @@ import codecs
 import datetime
 import json
 import os
+import re
 import shutil
 import time
 from pathlib import Path
@@ -44,18 +45,20 @@ def log(line):
         f.write(line + "\n")
 
 
-def submit(message, parent_model=None):
-    """Store a queued task; returns its id. `parent_model` = the caller's own model id: execute() picks the backend from it (agents.policy_chain)."""
+def submit(message, parent_model=None, workdir=None):
+    """Store a queued task; returns its id. `parent_model` = the caller's own model id: execute() picks the backend from it (agents.policy_chain).
+    `workdir` = the folder the task runs in (the caller's cwd); without it execute() falls back to FLOW_WORKDIR, then ROOT."""
     tid = str(time.time_ns())
-    payload = json.dumps({"task_id": tid, "message": message, "status": "queued", "timestamp": now(), **({"parent_model": parent_model} if parent_model else {})}, ensure_ascii=False)
+    extra = {k: v for k, v in (("parent_model", parent_model), ("workdir", workdir)) if v}
+    payload = json.dumps({"task_id": tid, "message": message, "status": "queued", "timestamp": now(), **extra}, ensure_ascii=False)
     redis().call("SET", f"task:{tid}", payload, "EX", TTL)
     log(f"[{now()}] [TASK:{tid}] {message} -> stored")
     return tid
 
 
-def enqueue(message, parent_model=None):
+def enqueue(message, parent_model=None, workdir=None):
     """Store a task and drop it in incoming_tasks/ for the listener to execute."""
-    tid = submit(message, parent_model)
+    tid = submit(message, parent_model, workdir)
     INCOMING.mkdir(parents=True, exist_ok=True)
     tmp = INCOMING / f"{tid}.tmp"  # rename so the listener never reads a half-written file
     tmp.write_text(message, encoding="utf-8")
@@ -79,17 +82,51 @@ def _failed(gate_out):
         return ["unknown"]
 
 
+# A backticked path in the answer (`dir/file.py` or `dir/file.py:12`). ponytail: only paths with a "/" are checked;
+# a bare file name could live anywhere in the tree, add a search if agents cite bare names wrongly.
+CITE = re.compile(r"`([^`\s:]*/[^`\s:]*)(?::(\d+))?`")
+
+
+def missing_citations(text, workdir):
+    """Cited paths that do not exist under workdir, or whose cited line is past the end of the file."""
+    out = set()
+    for path, line in CITE.findall(text or ""):
+        if "://" in path or any(c in path for c in "*<>{}$|"):
+            continue  # a URL or a pattern, not a file
+        f = Path(workdir, os.path.expanduser(path))
+        if not f.exists():
+            out.add(path)
+        elif line and f.is_file() and int(line) > len(f.read_bytes().splitlines()):
+            out.add(f"{path}:{line}")
+    return sorted(out)
+
+
 def execute(tid, message):
-    """Run one task. FLOW_GATE=1: gate after each attempt, retry with the gate output (FLOW_RETRIES) inside one budget.
+    """Run one task; any crash marks it failed so it never stays "running"."""
+    try:
+        return _execute(tid, message)
+    except Exception as e:
+        try:
+            redis().call("HSET", f"taskstate:{tid}", "status", "failed", "error", f"{type(e).__name__}: {e}"[:500], "finished", now())
+        except (RedisError, OSError):
+            pass
+        raise
+
+
+def _execute(tid, message):
+    """FLOW_GATE=1: gate after each attempt, retry with the gate output (FLOW_RETRIES) inside one budget.
     API trouble (503, 429, timeouts) is retried with backoff and falls over to the next FLOW_BACKENDS entry."""
-    workdir = os.environ.get("FLOW_WORKDIR", str(ROOT))
     budget, gated = float(os.environ.get("FLOW_MAX_USD", "0.50")), os.environ.get("FLOW_GATE") == "1"
     retries, model = int(os.environ.get("FLOW_RETRIES", "2")), os.environ.get("FLOW_MODEL", "haiku")
     key, r_ = f"taskstate:{tid}", redis()
     try:
-        parent = json.loads(r_.call("GET", f"task:{tid}") or "{}").get("parent_model")
+        task = json.loads(r_.call("GET", f"task:{tid}") or "{}")
     except ValueError:
-        parent = None
+        task = {}
+    parent = task.get("parent_model")
+    workdir = task.get("workdir") or os.environ.get("FLOW_WORKDIR", str(ROOT))
+    if not os.path.isdir(workdir):
+        raise OSError(f"workdir {workdir} does not exist")
     chain = agents.chain_from_env(f"claude:{model}", parent)  # a task is hands-on work: role "code"
     if parent:
         model = chain[0]
@@ -123,6 +160,15 @@ def execute(tid, message):
         prompt = f"{message}\n\nYour previous attempt failed these automated checks. Fix them:\n{gate_out[:1500]}"
 
     result = (res.text or "")[:4000]
+    if res.text:  # Redis keeps 4000 chars; the whole answer goes to a file
+        out = LOGS / f"{tid}.md"
+        LOGS.mkdir(parents=True, exist_ok=True)
+        out.write_text(res.text, encoding="utf-8")
+        rec["result_file"] = str(out)
+        missing = missing_citations(res.text, workdir)
+        if missing:  # the answer names files that are not there: flag it, the reader decides
+            rec["cited_missing"] = ", ".join(missing)[:500]
+    rec["workdir"] = workdir
     rec.update(status="done" if ok else "failed", duration_ms=int((time.time() - t0) * 1000), cost_usd=round(spent, 6), attempts=attempt, **tok)
     if res.backend:
         rec["backend"] = res.backend

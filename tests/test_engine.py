@@ -180,3 +180,56 @@ def test_require_model_refuses_a_caller_that_does_not_name_its_model(fake_redis,
     assert cli.main(["enqueue", "do it"]) == 1 and cli.main(["plan", "a goal"]) == 1
     assert "--model" in capsys.readouterr().err and not list(engine.INCOMING.glob("*.txt"))
     assert cli.main(["enqueue", "do it", "--model", "gemini-3.8-flash-high"]) == 0
+
+
+def _fake_agent(monkeypatch, text, seen=None):
+    seen = [] if seen is None else seen
+    for k in ("FLOW_BACKENDS", "FLOW_PARENT_MODEL", "FLOW_REQUIRE_MODEL", "FLOW_WORKDIR", "FLOW_GATE"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setattr(bridge, "recall", lambda m: "")
+    monkeypatch.setattr(bridge, "learn", lambda *a: None)
+    monkeypatch.setattr(agents, "call", lambda chain, prompt, o, trace=None: (seen.append(o.workdir), (agents.Result(True, text, backend=chain[0]), 0.0, {}))[1])
+
+
+def test_enqueued_task_runs_in_the_callers_folder_not_the_engine(fake_redis, capsys, monkeypatch, tmp_path):
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    seen = []
+    _fake_agent(monkeypatch, "ok", seen)
+    monkeypatch.chdir(proj)
+    assert cli.main(["enqueue", "review this"]) == 0
+    tid = capsys.readouterr().out.strip()
+    engine.execute(tid, "review this")
+    assert seen == [str(proj)] and engine.status(tid)["workdir"] == str(proj)
+
+
+def test_a_crash_inside_execute_marks_the_task_failed(fake_redis, monkeypatch):
+    _fake_agent(monkeypatch, "ok")
+    monkeypatch.setattr(agents, "call", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    tid = engine.submit("x")
+    with pytest.raises(RuntimeError):
+        engine.execute(tid, "x")
+    st = engine.status(tid)
+    assert st["status"] == "failed" and "boom" in st["error"]
+
+
+def test_a_missing_workdir_fails_the_task_instead_of_running_elsewhere(fake_redis, monkeypatch, tmp_path):
+    _fake_agent(monkeypatch, "ok")
+    tid = engine.submit("x", workdir=str(tmp_path / "gone"))
+    with pytest.raises(OSError):
+        engine.execute(tid, "x")
+    assert engine.status(tid)["status"] == "failed"
+
+
+def test_full_answer_is_kept_and_wrong_citations_are_flagged(fake_redis, monkeypatch, tmp_path):
+    proj = tmp_path / "proj"
+    (proj / "src").mkdir(parents=True)
+    (proj / "src" / "a.py").write_text("x = 1\ny = 2\nz = 3\n", encoding="utf-8")
+    text = "See `src/a.py:2` and `src/a.py:99` and `nope/b.py`, not `https://x.io/a` or `*/glob`.\n" + "pad " * 2000
+    _fake_agent(monkeypatch, text)
+    tid = engine.submit("x", workdir=str(proj))
+    ok, rec = engine.execute(tid, "x")
+    assert ok and len(fake_redis.db[f"taskstate:{tid}"]["result"]) == 4000
+    assert open(rec["result_file"], encoding="utf-8").read() == text
+    assert rec["cited_missing"] == "nope/b.py, src/a.py:99"
+    assert engine.missing_citations("only `src/a.py:3` here", str(proj)) == []

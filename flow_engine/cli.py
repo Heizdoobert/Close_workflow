@@ -78,6 +78,11 @@ def doctor():
     return 0 if all(ok for _, ok, _, req in checks if req) else 1
 
 
+def _caller_dir():
+    """The folder a task runs in: FLOW_WORKDIR, else where flow-task was called (never the engine's own copy)."""
+    return os.environ.get("FLOW_WORKDIR") or os.getcwd()
+
+
 def main(argv=None):
     for s in (sys.stdout, sys.stderr):
         if hasattr(s, "reconfigure"):
@@ -171,13 +176,13 @@ def main(argv=None):
             return 0
         if cmd == "enqueue" and rest:
             agents.require_model(_opt(rest, "--model"))
-            print(engine.enqueue(_goal(rest), _opt(rest, "--model")))
+            print(engine.enqueue(_goal(rest), _opt(rest, "--model"), _caller_dir()))
             return 0
         if cmd == "exec" and len(rest) == 2:
             ok, rec = engine.execute(rest[0], rest[1])
             print(f"{'done' if ok else 'failed'} task {rest[0]} ({rec['attempts']} attempt(s), ${rec['cost_usd']})")
             return 0 if ok else 1
-        tid = engine.submit(a[0])  # anything else is the task message
+        tid = engine.submit(a[0], workdir=_caller_dir())  # anything else is the task message
     except (plan.PlanError, interview.InterviewError, ValueError) as e:
         print(f"plan error: {e}", file=sys.stderr)
         return 1
