@@ -23,7 +23,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from flow_engine import sandbox
+from flow_engine import sandbox, secrets
 
 # matched against error text only, never against a successful answer
 TRANSIENT = re.compile(
@@ -297,7 +297,7 @@ def run_claude(model, prompt, o):
                     ev = {"step": o.step, "turn": turn, "tool": block.get("name", ""), "file": inp.get("file_path") or inp.get("path") or ""}
                     if block.get("name") == "Bash":
                         cmd = inp.get("command")
-                        ev["cmd"] = cmd[:120] if isinstance(cmd, str) else ""
+                        ev["cmd"] = secrets.redact(cmd)[:120] if isinstance(cmd, str) else ""  # redact first: a cut token would escape the pattern
                     o.events.append(ev)
             elif obj.get("type") == "result":
                 r = obj

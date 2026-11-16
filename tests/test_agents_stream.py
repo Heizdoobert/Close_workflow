@@ -122,6 +122,17 @@ def test_bash_event_keeps_first_120_chars_of_command(fake_claude):
     assert o.events[0]["cmd"] == "x" * 120
 
 
+def test_bash_event_cmd_is_redacted(fake_claude):
+    secret = "sk-" + "a1b2c3d4e5f6" * 3
+    cmd = "curl -H 'Authorization: Bearer " + secret + "' https://h " + "x" * 100
+    bash = json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {"command": cmd}}]}})
+    o = fake_claude([bash, RESULT])
+    agents.run_claude("haiku", "p", o)
+    assert secret not in o.events[0]["cmd"]
+    assert secret[:8] not in o.events[0]["cmd"]
+    assert len(o.events[0]["cmd"]) <= 120
+
+
 def test_read_event_has_no_cmd(fake_claude):
     read = json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {"file_path": "flow_engine/plan.py", "command": "ls"}}]}})
     o = fake_claude([read, RESULT])
