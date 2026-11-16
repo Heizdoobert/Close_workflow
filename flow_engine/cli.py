@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import sys
 
-from flow_engine import __version__, agents, bridge, doctor_api, engine, gate, interview, plan, sandbox, selftest
+from flow_engine import __version__, agents, bench, bridge, doctor_api, engine, gate, interview, plan, sandbox, selftest
 from flow_engine.resp import RedisError
 
 USAGE = ('usage: flow-task "<task message>"      store a task (with FLOW_EXEC=1 also run it)\n'
@@ -20,6 +20,7 @@ USAGE = ('usage: flow-task "<task message>"      store a task (with FLOW_EXEC=1 
          "       flow-task show <plan> | approve <plan> [--wait] [--allow-dirty] | retry <plan> | reject <plan> | report <plan> | run <plan> | plans\n"
          "       flow-task recover   resume plans whose runner died (no listener needed) and kill their orphan agent groups\n"
          "       flow-task clean [--older-than DAYS] [--result-branches]   remove finished plans' worktrees and flowstep/* branches (never a running plan)\n"
+         '       flow-task bench run | compare | analyze | change   harness: run the bench tasks, diff runs, group failures, record a change\n'
          "       flow-task doctor also reports the sandbox (bwrap) and gitleaks lines: a missing one is a warning, not a failure")
 
 
@@ -96,6 +97,8 @@ def main(argv=None):
         return 0
     cmd, rest = a[0], a[1:]
     try:
+        if cmd == "bench" and rest and rest[0] in bench.SUBCOMMANDS:
+            return bench.main(rest)
         if cmd == "doctor":
             return doctor()
         if cmd == "listen":
