@@ -64,10 +64,21 @@ def tasks():
     return found
 
 
+def _is_complete(path):
+    """A results.json counts as complete unless it says "complete": false. A file that does not parse counts as complete, so _rewards raises for it."""
+    if not path.is_file():
+        return False
+    try:
+        parsed = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return True
+    return not (isinstance(parsed, dict) and parsed.get('complete') is False)
+
+
 def _numbered_runs(complete_only=False):
     if not RUNS.is_dir():
         return []
-    return [int(d.name) for d in RUNS.iterdir() if d.is_dir() and re.fullmatch(r'\d+', d.name) and (not complete_only or (d / 'results.json').is_file())]
+    return [int(d.name) for d in RUNS.iterdir() if d.is_dir() and re.fullmatch(r'\d+', d.name) and (not complete_only or _is_complete(d / 'results.json'))]
 
 
 def next_run():
@@ -95,8 +106,11 @@ def run_task(task_dir, n):
                                                  budget=float(os.environ.get('FLOW_BENCH_USD', '0.50')), timeout=600, events=events),
                                      trace)
         _relative_events(events, repo)
+        accept_path = str((task_dir / 'accept.sh').resolve())
+        argv = sandbox.wrap(['bash', accept_path], str(repo)) if sandbox.available() == 'bwrap' else ['bash', accept_path]
+        env = {'PATH': os.environ.get('PATH', ''), 'HOME': tmp, 'LANG': 'C.UTF-8'}
         try:
-            p = subprocess.run(['bash', str((task_dir / 'accept.sh').resolve())], cwd=str(repo), capture_output=True, text=True, timeout=300)
+            p = subprocess.run(argv, cwd=str(repo), capture_output=True, text=True, timeout=300, env=env)
             rc = p.returncode
             out = (p.stdout or '') + (p.stderr or '')
         except subprocess.TimeoutExpired:
@@ -190,6 +204,9 @@ def _copy_tracked(repo):
 
 def _relative_events(events, repo):
     for ev in events:
+        if not isinstance(ev.get('file', ''), str):
+            ev['file'] = ''
+            continue
         f = ev.get('file') or ''
         if not f or not Path(f).is_absolute():
             continue
@@ -233,8 +250,18 @@ def cmd_change(rest):
     return 0
 
 
+def _load_results(n):
+    try:
+        parsed = json.loads((RUNS / str(n) / 'results.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        raise BenchError(f'bad results file for run {n}: not valid JSON')
+    if not isinstance(parsed, dict) or not isinstance(parsed.get('tasks'), dict):
+        raise BenchError(f'bad results file for run {n}: no tasks object')
+    return parsed
+
+
 def _rewards(n):
-    data = json.loads((RUNS / str(n) / 'results.json').read_text(encoding='utf-8'))
+    data = _load_results(n)
     return {name: int(item.get('reward', 0)) for name, item in data['tasks'].items()}
 
 
@@ -243,7 +270,7 @@ def cmd_compare(rest):
     if n is None:
         raise BenchError('no run yet: flow-task bench run')
     cur = _rewards(n)
-    if n - 1 < 1 or not (RUNS / str(n - 1) / 'results.json').is_file():
+    if n - 1 < 1 or not _is_complete(RUNS / str(n - 1) / 'results.json'):
         print('no previous run to compare with (run N is the first)')
         print('NEXT: flow-task bench analyze')
         return 0
@@ -273,6 +300,19 @@ def cmd_compare(rest):
     restored = []
     if restore:
         targets = [(_safe_path(path), text) for path, text in manifest['snapshot'].items()]
+        cwd = Path.cwd().resolve()
+        for path, _ in targets:
+            for candidate in [Path(path).absolute()] + list(Path(path).absolute().parents):
+                try:
+                    candidate.relative_to(cwd)
+                except ValueError:
+                    continue
+                if candidate.is_symlink():
+                    raise BenchError(f'refusing to restore through a symlink: {path}')
+            try:
+                Path(path).resolve().relative_to(cwd)
+            except ValueError:
+                raise BenchError(f'refusing to restore outside the repo: {path}')
         for path, text in targets:
             Path(path).write_text(text, encoding='utf-8')
             restored.append(path)
@@ -297,17 +337,20 @@ def _failing_step_class(trace_path):
                     lines.append(item)
     if not lines:
         return 0, 'unclassified'
-    step = lines[-1].get('step', 0)
-    touched = [line.get('file', '') for line in lines if line.get('step', 0) == step and line.get('file')]
+    def turn_of(item):
+        return item.get('turn', item.get('step', 0))
+
+    turn = turn_of(lines[-1])
+    touched = [line.get('file', '') for line in lines if turn_of(line) == turn and line.get('file')]
     cls = next((c for c in (class_of(f) for f in touched) if c is not None), 'unclassified')
-    return step, cls
+    return turn, cls
 
 
 def cmd_analyze(rest):
     n = latest_run()
     if n is None:
         raise BenchError('no run yet: flow-task bench run')
-    results = json.loads((RUNS / str(n) / 'results.json').read_text(encoding='utf-8'))
+    results = _load_results(n)
     failing = sorted(name for name, item in results['tasks'].items() if int(item.get('reward', 0)) == 0)
     if not failing:
         print(f'no failing tasks in run {n}')

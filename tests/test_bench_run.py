@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -123,3 +124,74 @@ def test_class_of_maps_known_and_unknown_paths():
     assert bench.class_of('flow_engine/gate.py') == 'gates'
     assert bench.class_of('flow_engine/./agents.py') == 'backends'
     assert bench.class_of('flow_engine/unknown.py') is None
+
+
+def _ok_call(chain, prompt, o, trace=None, sleep=None):
+    trace.append({'backend': 'fake', 'ok': True})
+    return agents.Result(ok=True, text='x', backend='x'), 0.0, {}
+
+
+@pytest.fixture
+def accept_env(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('ANTHROPIC_API_KEY', 'sk-test-secret')
+    monkeypatch.setattr(bench.sandbox, 'available', lambda: None)
+    monkeypatch.setattr(bench.agents, 'call', _ok_call)
+    monkeypatch.setattr(bench, '_copy_tracked', lambda repo: repo.mkdir(parents=True))
+    scratch = tmp_path / 'scratch'
+    scratch.mkdir()
+    monkeypatch.setattr(bench.tempfile, 'mkdtemp', lambda prefix='': str(scratch))
+    return tmp_path
+
+
+def _task(root, body):
+    d = root / 'harness' / 'bench' / 'envtask'
+    d.mkdir(parents=True)
+    (d / 'task.md').write_text('do it', encoding='utf-8')
+    (d / 'accept.sh').write_text(body, encoding='utf-8')
+    return d
+
+
+def test_accept_sh_does_not_inherit_api_key(accept_env):
+    task = _task(accept_env, 'echo "KEY=${ANTHROPIC_API_KEY:-unset}"\nexit 0\n')
+    res = bench.run_task(task, 1)
+    assert res['reward'] == 1
+    assert 'KEY=unset' in res['out']
+    assert 'sk-test-secret' not in res['out']
+
+
+def test_accept_sh_exit_one_is_reward_zero(accept_env):
+    task = _task(accept_env, 'exit 1\n')
+    assert bench.run_task(task, 1)['reward'] == 0
+
+
+def test_accept_sh_timeout_is_reward_zero(accept_env, monkeypatch):
+    def timed_out(*a, **k):
+        raise subprocess.TimeoutExpired(cmd='x', timeout=300)
+
+    monkeypatch.setattr(bench.subprocess, 'run', timed_out)
+    task = _task(accept_env, 'exit 0\n')
+    res = bench.run_task(task, 1)
+    assert res['reward'] == 0
+    assert res['out'] == 'accept.sh timeout'
+
+
+def test_accept_sh_runs_under_bwrap_when_available(accept_env, monkeypatch):
+    monkeypatch.setattr(bench.sandbox, 'available', lambda: 'bwrap')
+    argvs = []
+
+    def record(argv, **k):
+        argvs.append(argv)
+        return SimpleNamespace(returncode=0, stdout='', stderr='')
+
+    monkeypatch.setattr(bench.subprocess, 'run', record)
+    task = _task(accept_env, 'exit 0\n')
+    assert bench.run_task(task, 1)['reward'] == 1
+    assert argvs[0][0] == 'bwrap'
+    assert argvs[0][-2:] == ['bash', str((task / 'accept.sh').resolve())]
+
+
+def test_non_str_event_file_does_not_raise(tmp_path):
+    events = [{'file': 5, 'step': 1}]
+    bench._relative_events(events, tmp_path)
+    assert events[0]['file'] == ''

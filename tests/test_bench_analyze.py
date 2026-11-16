@@ -76,6 +76,32 @@ def test_absolute_event_path_is_classified(analyze_dir, capsys):
     assert 'gates: 1 failing: t1 [step 3]' in capsys.readouterr().out.splitlines()
 
 
+def test_results_without_tasks_key_is_bench_error(analyze_dir, capsys):
+    d = analyze_dir / 'harness' / 'runs' / '1'
+    (d / 'trace').mkdir(parents=True)
+    (d / 'results.json').write_text(json.dumps({'run': 1}), encoding='utf-8')
+    with pytest.raises(bench.BenchError, match='no tasks object'):
+        bench.cmd_analyze([])
+    assert bench.main(['analyze']) == 1
+    assert 'bench error' in capsys.readouterr().err
+
+
+def test_non_str_event_file_is_blanked(tmp_path):
+    events = [{'step': 1, 'tool': 'Edit', 'file': 5}, {'step': 1, 'tool': 'Edit', 'file': None}]
+    bench._relative_events(events, tmp_path)
+    assert [ev['file'] for ev in events] == ['', '']
+
+
+def test_turn_is_used_for_step_class(analyze_dir, capsys):
+    d = write_run(analyze_dir, 1, {'t1': 0})
+    write_trace(d, 't1', [{'kind': 'tool', 'step': 7, 'turn': 1, 'tool': 'Read', 'file': 'flow_engine/method.py'},
+                          {'kind': 'tool', 'step': 7, 'turn': 2, 'tool': 'Edit', 'file': 'flow_engine/gate.py'},
+                          {'kind': 'accept', 'exit': 1, 'out': 'x'}])
+    assert bench._failing_step_class(d / 'trace' / 't1.jsonl') == (2, 'gates')
+    assert bench.cmd_analyze([]) == 0
+    assert 'gates: 1 failing: t1 [step 2]' in capsys.readouterr().out.splitlines()
+
+
 def test_mixed_steps_and_unclassified(analyze_dir, capsys):
     d = write_run(analyze_dir, 1, {'t1': 0, 't2': 0, 't3': 0})
     write_trace(d, 't1', [{'kind': 'tool', 'step': 1, 'tool': 'Edit', 'file': 'flow_engine/method.py'},
