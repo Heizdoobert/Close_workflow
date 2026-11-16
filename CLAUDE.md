@@ -54,3 +54,12 @@ Celery queue, Milvus/DuckDB data pipeline và memory layer thuộc `../Agent_sys
 - An API call is capped through `Opts.token_cap`: the estimated input plus max_tokens must fit in the budget left. A running CLI call cannot be capped, so the plan can overshoot the budget by one call.
 - USD stays optional: set `FLOW_PRICE_<MODEL>` (price per million tokens) to get a cost; without it the cost is unknown, never 0.
 - The plan report has a `## Token tổng` section with the billable total, the cache reads and the split per backend.
+
+## Bench (harness A-D)
+- Cấu trúc: mỗi task là một thư mục `harness/bench/<task>/` gồm `task.md` (việc cần sửa) và `accept.sh`. Điểm thưởng (reward) = mã thoát của `accept.sh` (0 = đạt, 1 = không đạt); không chấm gì khác.
+- `flow-task bench run`: chạy mọi task, ghi `harness/runs/<N>/results.json` và `harness/runs/<N>/trace/<task>.jsonl` (sự kiện công cụ theo bước).
+- `flow-task bench compare`: so run N với N-1 (flips, regressions), ghi `harness/runs/<N>/eval.json` kèm lý do.
+- `flow-task bench analyze`: gom các task lỗi theo bước và theo 1 trong 7 nhóm thành phần, in tổng quan ngắn.
+- `flow-task bench change --file F --evidence E --root R --fix X --predict T1,T2`: ghi `harness/manifest/<N>.json` (4 trường, tối đa 2 file, chỉ đường dẫn trong 7 thư mục thành phần).
+- Quy tắc: `compare` khôi phục các file trong manifest về snapshot N-1 khi regressions nhiều hơn flips, hoặc khi không có task dự đoán nào lật (flip). Lý do ghi trong `eval.json`.
+- Mọi lệnh bench kết thúc bằng dòng `NEXT:` nêu lệnh tiếp theo. Làm theo dòng đó.

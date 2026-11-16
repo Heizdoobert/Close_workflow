@@ -120,3 +120,12 @@ Commands you will use: `flow-task where` (state and next action), `show <plan>`,
 - `FLOW_API_CACHE_MIN_CHARS` (default 4000): a longer prompt is sent with Anthropic `cache_control`. The saving is not measured.
 - Tokens are the unit of cost. `FLOW_PLAN_MAX_TOKENS` sets a per-plan billable-token budget (0 = off); `FLOW_BUDGET_CACHE_READ=1` counts cache reads; `FLOW_TOKEN_CHARS` is the rough chars-per-token estimate (not exact). USD is optional through `FLOW_PRICE_<MODEL>`. The plan report has a `## Token tổng` section.
 - `flow-task doctor` shows which modes are usable without printing a key.
+
+## Bench (harness A-D)
+- Layout: one task per folder, `harness/bench/<task>/task.md` (what to fix) and `harness/bench/<task>/accept.sh`. Reward = the exit code of `accept.sh` (0 = pass, 1 = fail); nothing else is scored.
+- `flow-task bench run`: runs every task and writes `harness/runs/<N>/results.json` and `harness/runs/<N>/trace/<task>.jsonl` (the step-indexed tool events).
+- `flow-task bench compare`: diffs run N against N-1 (flips, regressions) and writes `harness/runs/<N>/eval.json` with the reason.
+- `flow-task bench analyze`: groups the failing tasks by step and by one of 7 component classes and prints a short overview.
+- `flow-task bench change --file F --evidence E --root R --fix X --predict T1,T2`: records the change in `harness/manifest/<N>.json` (4 fields, at most 2 files, only paths in the 7 component dirs).
+- Rule: `compare` restores the manifest's files to the N-1 snapshot when regressions are more than flips, or when no predicted task flipped. The reason is written to `eval.json`.
+- Every bench command ends with a `NEXT:` line that names the next command. Follow it.
