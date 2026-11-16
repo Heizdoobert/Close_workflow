@@ -165,8 +165,8 @@ def test_gemini_parent_only_plans_and_decides_every_hands_on_call_runs_on_gpt_os
                {"s1": {"files": {"a.py": "value = 1\n"}}, "s2": {"files": {"notes.md": "n\n"}}})
     pid = plan.create("g", parent_model=gem)
     assert plan.approve(pid, wait_for=True) == "done"
-    # map of the repo (GPT-OSS), planner, both steps (GPT-OSS, even the one marked general), then the scout (GPT-OSS) and the review that decides on its facts
-    assert [c[1] for c in env.calls() if c[0] == "agy"] == [OSS, gem, OSS, OSS, OSS, gem]
+    # map of the repo (GPT-OSS), planner, both steps (GPT-OSS, even the one marked general), then the scout (GPT-OSS) and the review that decides on its facts, then the claims pass (the fake answers it with a non-claims reply, so it tries the next Gemini)
+    assert [c[1] for c in env.calls() if c[0] == "agy"] == [OSS, gem, OSS, OSS, OSS, gem, gem, "gemini-3.8-flash-low"]
     assert [c for c in env.calls() if c[0] == "review"] == [["review", "scouted"]]
     st = json.loads((env.home / "plans" / pid / "state.json").read_text())
     assert st["scout"] == {"status": "ok", "facts": [{"file": "a.py", "line": 1, "quote": "value = 1", "note": "the constant"}], "dropped": 2}  # only the quote that is really in the file

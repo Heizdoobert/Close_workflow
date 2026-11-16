@@ -282,9 +282,10 @@ def rollback(pid, base, head, files, triggers):
             "rto": "vài phút: chỉ cần lệnh git" if not risky else f"git không đủ: {', '.join(risky[:4])} là cấu hình, hạ tầng hoặc dữ liệu, phải hoàn tác tay thêm"}
 
 
-def decide(plan, st, personas, files, small, step_review):
+def decide(plan, st, personas, files, small, step_review, claims=None):
     """The merge phase, in code: blockers, recommended fixes, acknowledged risks. Any blocker (critical finding, failed integration, unfinished steps,
-    a persona that did not run) means NO-GO; GO always comes with a rollback plan."""
+    a persona that did not run) means NO-GO; GO always comes with a rollback plan. claims: the analysis-vs-report check, None when not run.
+    An LLM mismatch blocks only when verifiable, and an LLM pass that did not run is a blocker."""
     blockers, rec, risks = [], [], []
     steps = st["steps"]
     if any(e["status"] != "done" for e in steps.values()):
@@ -329,6 +330,21 @@ def decide(plan, st, personas, files, small, step_review):
         risks.append(f"đổi giao diện ({', '.join(ui[:4])}): bàn phím, screen reader, contrast chưa được kiểm, cần kiểm tay")
     if small:
         risks.append("đổi nhỏ (<=2 file, <50 dòng, không đụng auth/thanh toán/dữ liệu/cấu hình): bỏ fan-out theo luật của /ship, chỉ dựa vào bằng chứng của harness")
+    if isinstance(claims, dict):
+        blockers += [b for b in claims.get("blockers") or [] if isinstance(b, str)]
+        llm = claims.get("llm") if isinstance(claims.get("llm"), dict) else {}
+        for f in llm.get("findings") or []:
+            if not isinstance(f, dict):
+                continue
+            item, evidence = str(f.get("item") or ""), str(f.get("evidence") or "")
+            if f.get("verdict") == "mismatch" and f.get("verifiable") is True:
+                blockers.append(("claims: [đối chiếu] " + item + " — " + evidence)[:300])
+            elif f.get("verdict") == "mismatch":
+                rec.append(("claims: [chưa kiểm được] " + item + " — " + evidence)[:300])
+            elif f.get("verdict") == "unsupported":
+                rec.append(("MỘT PHẦN: " + item + " (" + evidence + ")")[:300])
+        if llm.get("status") == "not_run":
+            blockers.append("claims: lượt đối chiếu LLM không chạy (" + str(llm.get("error") or "") + "), không thể GO khi chưa đối chiếu")
     return {"decision": "NO-GO" if blockers else "GO", "blockers": blockers, "recommended": rec, "risks": risks}
 
 

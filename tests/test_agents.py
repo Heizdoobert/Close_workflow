@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from flow_engine import agents
+from flow_engine import agents, engine
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="fake binaries are POSIX scripts")
 HERE = Path(__file__).parent
@@ -37,6 +37,8 @@ def fakes(tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_STEPS", str(tmp_path / "steps.json"))
     monkeypatch.setenv("FLOW_SLOT_DIR", str(tmp_path / "slots"))
     (tmp_path / "steps.json").write_text("{}")
+    monkeypatch.setattr(engine, "LOGS", tmp_path / "logs")  # agents.call logs; never into the real engine log
+    monkeypatch.setattr(engine, "LOG", tmp_path / "logs" / "flow_engine.log")
     return tmp_path
 
 

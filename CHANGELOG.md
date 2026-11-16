@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Claims layer (anti-lying) before SHIP: step PASS/FAIL claims rerun at the step commit, `analysis.md` hash checked, one LLM cross-check; an unrun check is NO-GO (`FLOW_CLAIMS`, `FLOW_CLAIMS_USD`).
 - `pyproject.toml` declares the MIT license.
 
 ### Removed

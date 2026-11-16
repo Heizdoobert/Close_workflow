@@ -23,7 +23,7 @@ import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from flow_engine import agents, audit, bridge, engine, gate, interview, journal, method
+from flow_engine import agents, audit, bridge, claims, claims_llm, engine, gate, interview, journal, method
 # SECRET_PATTERNS and redact live in secrets.py; they stay importable from here
 from flow_engine.secrets import SECRET_PATTERNS, redact, redact_obj, redact_shapes
 
@@ -54,7 +54,8 @@ Instructions: {prompt}
 Do not rename, move or delete a path, or remove a public function/class other code uses, unless it is in your files list (check callers with Grep first).
 Finish the work: no stubs (a function that only passes), no TODO or debug leftovers, no swallowed exceptions, no test without an assertion, no eval/shell=True/SQL built from strings.
 {deps}Acceptance check (it will be run for you afterwards): {acceptance}
-When finished, verify your own work, then reply in 2-4 sentences: what you changed and what the check showed. Do not commit. Do not touch anything outside this directory."""
+When finished, verify your own work, then reply in 2-4 sentences: what you changed and what the check showed. Do not commit. Do not touch anything outside this directory.
+End your reply with one line that is exactly 'CLAIM: PASS' if the acceptance check passes in this directory now, or 'CLAIM: FAIL' if it does not."""
 EARLIER = "Earlier attempts at this step (do not repeat what failed):"
 REFLECT = "First, open your reply with one line 'REFLECTION: <what failed>, <why>, <what I change>'. Then make the fix."
 SAME_TWICE = "The same failure happened twice: change your approach, do not repeat the last edit."
@@ -317,6 +318,8 @@ def create(goal, parent_model=None, brief=None):
     for e in trace:  # an agent error can echo an API key
         e["error"] = redact(e.get("error", ""))
     _atomic(d / "plan.json", json.dumps(plan, indent=2, ensure_ascii=False))
+    claims.write_analysis(d, plan.get("analysis"))  # the claims check compares the report with this file
+    state["analysis_sha"] = claims.file_sha(d / "analysis.md")  # a later edit of analysis.md is caught by check_analysis
     _atomic(d / "state.json", json.dumps(state, indent=2, ensure_ascii=False))
     (d / "plan.md").write_text(render_md(pid, plan, state), encoding="utf-8")
     _mirror(pid, status="awaiting_approval", goal=goal[:200])
@@ -649,6 +652,12 @@ def _reflection(text):
     return redact(m.group(0).strip())[:300] if m else ""
 
 
+def _claim(text):
+    """The PASS/FAIL the agent claimed in its last 'CLAIM:' line, or None when it claimed nothing."""
+    found = re.findall(r"^[ \t]*CLAIM:[ \t]*(PASS|FAIL)[ \t]*$", text or "", re.M)
+    return found[-1] if found else None
+
+
 def _fail_hash(fb):
     """Identity of a failure: digits stripped, so a line number or a timestamp moving does not make a new failure."""
     return hashlib.sha256(re.sub(r"\d+", "", fb).encode()).hexdigest()[:12]
@@ -697,7 +706,7 @@ def do_step(ctx, step, rescued=False):
         _cleanup(ctx, sid)
         git(ctx.repo, "worktree", "add", "-q", "-b", br, str(wt), base_sha)
     ev.update(status="running", started=engine.now(), base=base_sha[:10], branch=br, attempts=[], api=ev.get("api", []))
-    for k in ("stuck", "drift", "reflection"):  # per run: a retry or a resume starts these over
+    for k in ("stuck", "drift", "reflection", "claimed"):  # per run: a retry or a resume starts these over
         ev.pop(k, None)
     ctx.save()
     t0 = time.time()
@@ -741,6 +750,7 @@ def do_step(ctx, step, rescued=False):
         if reflection:
             ev["reflection"] = reflection
         acc = accept(step, str(wt))  # first: a test that writes a key-shaped file must be seen by the secrets gate that runs after it
+        ev["claimed"] = _claim(res.text)
         g = gate.run_gates(str(wt), allowed=step["files"])
         ev["attempts"].append({"n": n, "gates": _gate_line(g), "gates_ok": g["ok"], "acceptance": acc})
         ctx.save()
@@ -923,11 +933,13 @@ def run(pid):
         sts = [v["status"] for v in state["steps"].values()]
         state["integration"] = integrate(ctx) if "done" in sts else None  # nothing merged = nothing to integrate
         if "done" in sts:  # advisory passes: one failing never loses the plan result. Order: security, review (+simplify), code-verify, ship
-            for key, fn in (("security", lambda: plan_audit(ctx, "security")), ("scout", lambda: scout_pass(ctx)), ("review", lambda: review_pass(ctx)), ("verify", lambda: plan_audit(ctx, "verify")), ("ship", lambda: ship_pass(ctx))):
+            for key, fn in (("security", lambda: plan_audit(ctx, "security")), ("scout", lambda: scout_pass(ctx)), ("review", lambda: review_pass(ctx)), ("verify", lambda: plan_audit(ctx, "verify")),
+                            ("claims", lambda: run_claims(ctx)), ("ship", lambda: ship_pass(ctx))):
                 try:
                     state[key] = fn()
                 except Exception as e:
                     state[key] = {"status": "not_run", "decision": "error", "error": f"{type(e).__name__}: {e}"[:200]}
+                ctx.save()  # each result is on disk before the next pass can fail or the runner dies
         state["status"] = "done" if all(x == "done" for x in sts) and state["integration"]["ok"] else ("partial" if "done" in sts else "failed")
     except Exception as e:
         state.update(status="failed", error=f"{type(e).__name__}: {e}"[:300])
@@ -1035,6 +1047,66 @@ def review_pass(ctx):
         return {"status": "not_run", "error": f"review reply unusable: {e}"[:500]}
 
 
+def _claims_text(ctx):
+    """What the agents claim, as the report will show it: each step's summary and the integration verdict. report.md is written after the claims check."""
+    lines = [f"[{sid}] {ev.get('status')}: {ev.get('summary') or ev.get('error') or '(không chạy)'}" for sid, ev in ctx.state["steps"].items()]
+    return redact("\n".join(lines + [f"integration: {'OK' if (ctx.state.get('integration') or {}).get('ok') else 'FAIL'}"]))
+
+
+def _accept_at(ctx, step, sha):
+    """Rerun the step's acceptance in a clean checkout of the step's own commit, not in the integrated tree: a later step's files cannot flip the verdict."""
+    if not sha:
+        return {"cmd": step["acceptance"], "ok": False, "rc": None, "tail": "no commit to check"}
+    tmp = ctx.d / "claims-wt" / step["id"]
+    tmp.parent.mkdir(parents=True, exist_ok=True)
+    with ctx.glock:
+        git(ctx.repo, "worktree", "remove", "--force", str(tmp), check=False)
+        git(ctx.repo, "worktree", "add", "-q", "--detach", str(tmp), sha)
+    try:
+        return accept(step, str(tmp))
+    finally:
+        with ctx.glock:
+            git(ctx.repo, "worktree", "remove", "--force", str(tmp), check=False)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def run_claims(ctx):
+    """Claims check (chống nói dối), once after integration and before SHIP. Machine rows rerun each finished step's acceptance at the step's commit and compare
+    it with the PASS/FAIL the step claimed; research files must be real and analysis.md must match what create wrote; one read-only LLM pass compares the claims
+    with analysis.md. Advisory: SHIP reads the blockers."""
+    if os.environ.get("FLOW_CLAIMS", "1") != "1":
+        return {"status": "off"}
+    analysis = ctx.plan.get("analysis")
+    if not analysis or not (ctx.d / "analysis.md").exists():
+        return {"status": "skipped", "reason": "plan không có analysis (plan cũ)"}
+    wt = str(ctx.plan_wt)
+    claimed = {sid: ev.get("claimed") for sid, ev in ctx.state["steps"].items()}
+    mc = claims.machine_check(ctx.plan, ctx.state, lambda step, _wt: _accept_at(ctx, step, ctx.state["steps"][step["id"]].get("commit")), wt, claimed)
+    mc["blockers"] += ["claims: " + p for p in claims.check_research(analysis, wt)] + claims.check_analysis(ctx.d, ctx.state, analysis)
+    mc["ok"] = not mc["blockers"]
+    if not (ctx.state.get("integration") or {}).get("ok"):
+        return {"status": "partial", "machine": mc, "blockers": mc["blockers"]}
+    with ctx.slock:
+        cap = min(float(os.environ.get("FLOW_CLAIMS_USD", "0.2")), ctx.free())
+    if cap < 0.02:
+        llm = {"status": "not_run", "error": "plan budget used up"}
+    else:
+        llm = claims_llm.review(ctx.chain, claims.analysis_text(analysis), _claims_text(ctx), mc["rows"], cap,
+                                lambda chain, p, c: agents.call(chain, p, agents.Opts(wt, agents.READ_TOOLS, c, 300), []), wt=wt)
+        ctx.add_cost(llm.get("cost", 0), llm.get("tokens") or {})
+    return {"status": "ok", "machine": mc, "llm": llm, "blockers": mc["blockers"]}
+
+
+def _claims_for_decide(st):
+    """What SHIP reads from the claims check. None when the check was off or skipped, so SHIP decides as it did before."""
+    c = st.get("claims")
+    if not c or c.get("status") in ("off", "skipped"):
+        return None
+    if c.get("status") == "not_run":  # the check itself crashed: SHIP must say so, not pass as clean
+        return {"blockers": [], "llm": {"status": "not_run", "error": c.get("error", "")}}
+    return {"blockers": c.get("blockers") or [], "llm": c.get("llm") or {}}
+
+
 def ship_pass(ctx):
     """Step 13 (the /ship command): three read-only personas in parallel over the merged diff, merged by code into GO / NO-GO with a rollback plan.
     Nothing is called when the plan already failed (that is a NO-GO on harness facts) or when the change is small (ship rule 5). Advisory: it never changes the plan status."""
@@ -1068,7 +1140,7 @@ def ship_pass(ctx):
                 return {"status": "not_run", "error": f"{type(e).__name__}: {e}"[:500]}
         with ThreadPoolExecutor(len(method.PERSONAS)) as pool:
             personas = dict(zip(method.PERSONAS, pool.map(one, method.PERSONAS)))
-    verdict = method.decide(ctx.plan, st, personas, changed, small, st.get("review"))
+    verdict = method.decide(ctx.plan, st, personas, changed, small, st.get("review"), claims=_claims_for_decide(st))
     trig = (personas.get("code-reviewer") or {}).get("rollback_triggers", [])
     return {**verdict, "small": small, "personas": personas, "rollback": method.rollback(ctx.pid, base, head, changed, trig)}
 
@@ -1196,6 +1268,17 @@ def report(pid):
         L += [f"- edge case đã xét: {'; '.join(rv['edge_cases'])}"] if rv["edge_cases"] else []
         L += [f"- bỏ {rv['dropped']} phát hiện không trỏ vào file trong diff"] if rv.get("dropped") else []
     L += method.audit_md("Code verify (chống code ẩu trên toàn bộ diff)", st.get("verify"))
+    cl = st.get("claims") or {}
+    if cl and cl.get("status") != "off":
+        L += ["", "## Kiểm tra đối chiếu (báo cáo agent so với analysis và chạy lại acceptance)"]
+        if cl.get("status") in ("ok", "partial"):
+            mc, llm = cl.get("machine") or {}, cl.get("llm") or {}
+            L += [f"- bước {r['step']}: khai {r['claimed'] or 'không khai'}, chạy lại {'PASS' if r['actual'] else 'FAIL'}" for r in mc.get("rows", [])]
+            L += [f"- chặn: {b}" for b in cl.get("blockers") or []] or ["- chặn: không có"]
+            L += [f"- [{f['verdict']}] {f['item']} — {f['evidence']}" for f in llm.get("findings", [])]
+            L += [f"- lượt LLM đối chiếu: {llm.get('status', 'không chạy (plan chưa tích hợp)')}" + (f" ({llm['error']})" if llm.get("error") else "")]
+        else:
+            L += [f"- {cl.get('status')}: {cl.get('reason') or cl.get('error') or ''}"]
     L += [""] + method.ship_md(st.get("ship") or {})
     agg = {}
     for c in st.get("calls", []):  # who spent which tokens on which model
