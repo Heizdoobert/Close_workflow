@@ -112,3 +112,19 @@ def test_non_stream_non_dict_stdout_fails_without_raising(tmp_path, monkeypatch)
     _fake_claude(tmp_path, monkeypatch, ["5"])
     r = agents.run_claude("haiku", "prompt", agents.Opts(workdir=str(tmp_path), events=None))
     assert r.ok is False
+
+
+def test_bash_event_keeps_first_120_chars_of_command(fake_claude):
+    bash = json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {"command": "x" * 200}}]}})
+    o = fake_claude([bash, RESULT])
+    agents.run_claude("haiku", "p", o)
+    assert o.events[0]["tool"] == "Bash"
+    assert o.events[0]["cmd"] == "x" * 120
+
+
+def test_read_event_has_no_cmd(fake_claude):
+    read = json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {"file_path": "flow_engine/plan.py", "command": "ls"}}]}})
+    o = fake_claude([read, RESULT])
+    agents.run_claude("haiku", "p", o)
+    assert o.events[0]["tool"] == "Read"
+    assert "cmd" not in o.events[0]
