@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -29,6 +30,15 @@ COMPONENTS = {
 
 class BenchError(Exception):
     pass
+
+
+SUBCOMMANDS = ('run', 'compare', 'analyze', 'change')
+NEXT_ON_ERROR = {
+    'run': 'NEXT: flow-task bench run',
+    'compare': 'NEXT: flow-task bench compare',
+    'analyze': 'NEXT: flow-task bench analyze',
+    'change': 'NEXT: flow-task bench change --file <F> --evidence <E> --root <R> --fix <X> --predict <T>',
+}
 
 
 def class_of(path):
@@ -258,3 +268,18 @@ def cmd_analyze(rest):
     predict = ','.join(task for task, _ in groups[top])
     print(f'NEXT: flow-task bench change --file {top_file} --evidence <E> --root <R> --fix <X> --predict {predict}')
     return 0
+
+
+def main(rest):
+    sub = rest[0] if rest else ''
+    if sub not in SUBCOMMANDS:
+        print('usage: flow-task bench run | compare | analyze | change --file F --evidence E --root R --fix X --predict T')
+        print('NEXT: flow-task bench run')
+        return 1
+    fn = {'run': cmd_run, 'compare': cmd_compare, 'analyze': cmd_analyze, 'change': cmd_change}[sub]
+    try:
+        return fn(rest[1:])
+    except BenchError as e:
+        print('bench error: ' + str(e), file=sys.stderr)
+        print(NEXT_ON_ERROR[sub])
+        return 1
