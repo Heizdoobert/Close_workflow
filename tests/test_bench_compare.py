@@ -1,4 +1,5 @@
 import json
+import os
 
 import pytest
 
@@ -13,11 +14,14 @@ def compare_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
-def write_run(root, n, rewards):
+def write_run(root, n, rewards, complete=None):
     d = root / 'harness' / 'runs' / str(n)
     d.mkdir(parents=True)
     tasks = {name: {'reward': r} for name, r in rewards.items()}
-    (d / 'results.json').write_text(json.dumps({'run': n, 'tasks': tasks}), encoding='utf-8')
+    payload = {'run': n, 'tasks': tasks}
+    if complete is not None:
+        payload['complete'] = complete
+    (d / 'results.json').write_text(json.dumps(payload), encoding='utf-8')
 
 
 def write_manifest(root, n, predict):
@@ -116,3 +120,40 @@ def test_corrupt_results_is_bench_error(compare_dir, capsys):
     (compare_dir / 'harness' / 'runs' / '2' / 'results.json').write_text('nope', encoding='utf-8')
     assert bench.main(['compare']) == 1
     assert 'bench error' in capsys.readouterr().err
+
+
+def test_incomplete_run_is_skipped_by_latest_run(compare_dir):
+    write_run(compare_dir, 1, {'t1': 1}, complete=True)
+    write_run(compare_dir, 2, {'t1': 0}, complete=False)
+    assert bench.latest_run() == 1
+
+
+def test_incomplete_previous_run_is_not_compared(compare_dir, capsys):
+    write_run(compare_dir, 1, {'t1': 1}, complete=True)
+    write_run(compare_dir, 2, {'t1': 0}, complete=False)
+    write_run(compare_dir, 3, {'t1': 1}, complete=True)
+    assert bench.cmd_compare([]) == 0
+    assert 'no previous run' in capsys.readouterr().out
+    assert not (compare_dir / 'harness' / 'runs' / '3' / 'eval.json').exists()
+
+
+def test_results_without_tasks_key_is_bench_error(compare_dir, capsys):
+    write_run(compare_dir, 1, {'t1': 1})
+    (compare_dir / 'harness' / 'runs' / '2').mkdir(parents=True)
+    (compare_dir / 'harness' / 'runs' / '2' / 'results.json').write_text(json.dumps({'run': 2}), encoding='utf-8')
+    with pytest.raises(bench.BenchError, match='no tasks object'):
+        bench.cmd_compare([])
+    assert bench.main(['compare']) == 1
+    assert 'bench error' in capsys.readouterr().err
+
+
+def test_manifest_symlink_target_is_refused(compare_dir):
+    write_run(compare_dir, 1, {'t1': 0})
+    write_run(compare_dir, 2, {'t1': 0})
+    write_manifest(compare_dir, 2, ['t1'])
+    (compare_dir / 'target.txt').write_text('SECRET', encoding='utf-8')
+    (compare_dir / 'flow_engine' / 'agents.py').unlink()
+    os.symlink(compare_dir / 'target.txt', compare_dir / 'flow_engine' / 'agents.py')
+    with pytest.raises(bench.BenchError, match='symlink'):
+        bench.cmd_compare([])
+    assert (compare_dir / 'target.txt').read_text(encoding='utf-8') == 'SECRET'
