@@ -164,3 +164,56 @@ def cmd_change(rest):
     print(f'manifest written: {out}')
     print('NEXT: flow-task bench run')
     return 0
+
+
+def _rewards(n):
+    data = json.loads((RUNS / str(n) / 'results.json').read_text(encoding='utf-8'))
+    return {name: int(item.get('reward', 0)) for name, item in data['tasks'].items()}
+
+
+def cmd_compare(rest):
+    n = latest_run()
+    if n is None:
+        raise BenchError('no run yet: flow-task bench run')
+    cur = _rewards(n)
+    if n - 1 < 1 or not (RUNS / str(n - 1) / 'results.json').is_file():
+        print('no previous run to compare with (run N is the first)')
+        print('NEXT: flow-task bench analyze')
+        return 0
+    prev = _rewards(n - 1)
+    flips = []
+    for name in sorted(set(prev) | set(cur)):
+        a = prev.get(name, 0)
+        b = cur.get(name, 0)
+        if a != b:
+            flips.append((name, a, b))
+            print(f'{name}: {a}->{b}')
+    improvements = sum(1 for _, a, b in flips if a == 0 and b == 1)
+    regressions = sum(1 for _, a, b in flips if a == 1 and b == 0)
+    manifest_file = MANIFEST / f'{n}.json'
+    manifest = json.loads(manifest_file.read_text(encoding='utf-8')) if manifest_file.is_file() else None
+    predicted_flip = None
+    reason = ''
+    restore = False
+    if manifest is not None:
+        predict = manifest['predict']
+        predicted_flip = sum(1 for name in predict if prev.get(name, 0) == 0 and cur.get(name, 0) == 1)
+        if regressions > improvements:
+            reason = f'regressions {regressions} > flips {improvements}'
+        elif predicted_flip == 0:
+            reason = f'zero predicted flips (predicted: {", ".join(predict)})'
+        restore = bool(reason)
+    restored = []
+    if restore:
+        for path, text in manifest['snapshot'].items():
+            Path(path).write_text(text, encoding='utf-8')
+            restored.append(path)
+    eval_data = {'run': n, 'improvements': improvements, 'regressions': regressions, 'predicted_flip': predicted_flip,
+                 'restored': restored, 'reason': reason}
+    (RUNS / str(n) / 'eval.json').write_text(json.dumps(eval_data, indent=2, ensure_ascii=False), encoding='utf-8')
+    if restored:
+        print(f'restored {", ".join(restored)} to run {n - 1} state: {reason}')
+    else:
+        print('kept run N changes')
+    print('NEXT: flow-task bench analyze')
+    return 0
