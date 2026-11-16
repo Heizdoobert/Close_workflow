@@ -1,0 +1,1 @@
+In flow_engine/bench.py add a function component_files() that returns a sorted list of every file path listed in the COMPONENTS dict (all classes together, no duplicates). Do not change any other function.
