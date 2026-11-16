@@ -105,3 +105,62 @@ def cmd_run(rest):
     (RUNS / str(n) / 'results.json').write_text(json.dumps({'run': n, 'tasks': results}, ensure_ascii=False, indent=2), encoding='utf-8')
     print('NEXT: flow-task bench compare')
     return 0
+
+
+CHANGE_USAGE = 'usage: flow-task bench change --file F [--file G] --evidence E --root R --fix X --predict T1,T2'
+CHANGE_FLAGS = ('--file', '--evidence', '--root', '--fix', '--predict')
+
+
+def _change_args(rest):
+    opts = {'--file': [], '--evidence': '', '--root': '', '--fix': '', '--predict': ''}
+    i = 0
+    while i < len(rest):
+        flag = rest[i]
+        if flag not in CHANGE_FLAGS or i + 1 >= len(rest):
+            raise BenchError(CHANGE_USAGE)
+        value = rest[i + 1]
+        if flag == '--file':
+            opts['--file'].append(value)
+        else:
+            opts[flag] = value
+        i += 2
+    return opts
+
+
+def _check_file(raw):
+    path = Path(raw[2:] if raw.startswith('./') else raw).as_posix()
+    if Path(path).is_absolute() or '..' in Path(path).parts or class_of(path) is None:
+        raise BenchError(f'outside the 7 component dirs: {path}')
+    if not Path(path).is_file():
+        raise BenchError(f'no such file: {path}')
+    return path
+
+
+def cmd_change(rest):
+    opts = _change_args(rest)
+    fields = {}
+    for name in ('--evidence', '--root', '--fix', '--predict'):
+        value = opts[name].strip()
+        if not value:
+            raise BenchError(f'missing {name}')
+        fields[name] = value
+    if not 1 <= len(opts['--file']) <= 2:
+        raise BenchError('change may touch 1 or 2 files')
+    files = [_check_file(f) for f in opts['--file']]
+    predict = [p.strip() for p in fields['--predict'].split(',') if p.strip()]
+    if not predict:
+        raise BenchError('missing --predict')
+    known = {d.name for d in tasks()}
+    for name in predict:
+        if name not in known:
+            raise BenchError(f'unknown task: {name}')
+    n = next_run()
+    snapshot = {path: Path(path).read_text(encoding='utf-8') for path in files}
+    manifest = {'run': n, 'files': files, 'evidence': fields['--evidence'], 'root': fields['--root'],
+                'fix': fields['--fix'], 'predict': predict, 'snapshot': snapshot}
+    MANIFEST.mkdir(parents=True, exist_ok=True)
+    out = MANIFEST / f'{n}.json'
+    out.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding='utf-8')
+    print(f'manifest written: {out}')
+    print('NEXT: flow-task bench run')
+    return 0
