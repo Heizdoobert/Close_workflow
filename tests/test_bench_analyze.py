@@ -40,6 +40,22 @@ def test_bad_task_entry_is_bench_error(analyze_dir, capsys, tasks):
     assert 'bench error' in capsys.readouterr().err
 
 
+def test_infinite_reward_is_bench_error(analyze_dir, capsys):
+    write_run(analyze_dir, 1, {'t1': float('inf')})
+    assert bench.main(['analyze']) == 1
+    err = capsys.readouterr().err
+    assert 'bench error' in err
+    assert 'run 1' in err
+
+
+def test_non_dict_trace_lines_are_skipped(analyze_dir, capsys):
+    d = write_run(analyze_dir, 1, {'t1': 0})
+    lines = ['5', '[1]', json.dumps({'kind': 'tool', 'step': 2, 'tool': 'Edit', 'file': 'flow_engine/gate.py'}), json.dumps({'kind': 'accept', 'exit': 1, 'out': 'x'})]
+    (d / 'trace' / 't1.jsonl').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    assert bench.main(['analyze']) == 0
+    assert 'gates: 1 failing: t1 [step 2]' in capsys.readouterr().out.splitlines()
+
+
 def test_overview_groups_by_class(analyze_dir, capsys):
     setup_failing(analyze_dir)
     assert bench.cmd_analyze([]) == 0
