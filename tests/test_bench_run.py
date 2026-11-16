@@ -64,6 +64,18 @@ def test_run_refused_without_sandbox(bench_dir, monkeypatch):
     assert not (bench_dir / 'harness' / 'runs').exists()
 
 
+def test_run_task_refused_without_sandbox(bench_dir, monkeypatch):
+    monkeypatch.delenv('FLOW_BENCH_UNSANDBOXED', raising=False)
+    monkeypatch.setattr(bench.sandbox, 'available', lambda: 'none')
+
+    def no_copy(*a, **k):
+        raise AssertionError('run_task copied before the sandbox check')
+
+    monkeypatch.setattr(bench.tempfile, 'mkdtemp', no_copy)
+    with pytest.raises(bench.BenchError, match='bwrap'):
+        bench.run_task(bench.BENCH / 't1', 1)
+
+
 def test_run_allowed_with_bwrap(bench_dir, monkeypatch):
     monkeypatch.delenv('FLOW_BENCH_UNSANDBOXED', raising=False)
     monkeypatch.setattr(bench.sandbox, 'available', lambda: 'bwrap')
@@ -135,6 +147,7 @@ def _ok_call(chain, prompt, o, trace=None, sleep=None):
 def accept_env(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv('ANTHROPIC_API_KEY', 'sk-test-secret')
+    monkeypatch.setenv('FLOW_BENCH_UNSANDBOXED', '1')
     monkeypatch.setattr(bench.sandbox, 'available', lambda: None)
     monkeypatch.setattr(bench.agents, 'call', _ok_call)
     monkeypatch.setattr(bench, '_copy_tracked', lambda repo: repo.mkdir(parents=True))

@@ -94,7 +94,13 @@ def chain():
     return [b.strip() for b in os.environ.get('FLOW_BENCH_BACKENDS', 'claude:haiku').split(',') if b.strip()]
 
 
+def _require_sandbox():
+    if sandbox.available() != 'bwrap' and os.environ.get('FLOW_BENCH_UNSANDBOXED') != '1':
+        raise BenchError('bench run needs the bwrap sandbox (bubblewrap); set FLOW_BENCH_UNSANDBOXED=1 to run without it')
+
+
 def run_task(task_dir, n):
+    _require_sandbox()
     tmp = tempfile.mkdtemp(prefix='bench-')
     repo = Path(tmp) / 'repo'
     try:
@@ -123,8 +129,7 @@ def run_task(task_dir, n):
 
 
 def cmd_run(rest):
-    if sandbox.available() != 'bwrap' and os.environ.get('FLOW_BENCH_UNSANDBOXED') != '1':
-        raise BenchError('bench run needs the bwrap sandbox (bubblewrap); set FLOW_BENCH_UNSANDBOXED=1 to run without it')
+    _require_sandbox()
     todo = tasks()
     n = next_run()
     run_dir = RUNS / str(n)
@@ -257,6 +262,13 @@ def _load_results(n):
         raise BenchError(f'bad results file for run {n}: not valid JSON')
     if not isinstance(parsed, dict) or not isinstance(parsed.get('tasks'), dict):
         raise BenchError(f'bad results file for run {n}: no tasks object')
+    for name, item in parsed['tasks'].items():
+        if not isinstance(item, dict):
+            raise BenchError(f'bad results file for run {n}: bad task entry {name}')
+        try:
+            int(item.get('reward', 0))
+        except (TypeError, ValueError):
+            raise BenchError(f'bad results file for run {n}: bad task entry {name}')
     return parsed
 
 
