@@ -29,7 +29,7 @@ def test_stream_json_records_tool_events(tmp_path, monkeypatch):
     r = agents.run_claude("haiku", "prompt", agents.Opts(workdir=str(tmp_path), events=events, step=3))
     assert r.ok is True
     assert r.text == "ok"
-    assert events == [{"step": 4, "tool": "Read", "file": "a.py"}]
+    assert events == [{"step": 3, "turn": 1, "tool": "Read", "file": "a.py"}]
 
 
 def test_json_path_without_events_still_returns_text(tmp_path, monkeypatch):
@@ -92,5 +92,23 @@ def test_steps_follow_assistant_turns(fake_claude):
     turn2 = json.dumps({"type": "assistant", "message": {"content": ["x", {"type": "tool_use", "name": "Read", "input": {"path": "flow_engine/plan.py"}}]}})
     o = fake_claude([TOOL, turn2, RESULT])
     agents.run_claude("haiku", "p", o)
-    assert [e["step"] for e in o.events] == [1, 2]
+    assert [e["turn"] for e in o.events] == [1, 2]
+    assert [e["step"] for e in o.events] == [0, 0]
     assert o.events[1]["file"] == "flow_engine/plan.py"
+
+
+def test_stream_step_is_caller_step_and_turn_counts_assistant_messages(fake_claude):
+    o = fake_claude([TOOL, TOOL, RESULT])
+    o.step = 3
+    res = agents.run_claude("haiku", "p", o)
+    assert res.ok
+    assert o.events == [
+        {"step": 3, "turn": 1, "tool": "Edit", "file": "flow_engine/gate.py"},
+        {"step": 3, "turn": 2, "tool": "Edit", "file": "flow_engine/gate.py"},
+    ]
+
+
+def test_non_stream_non_dict_stdout_fails_without_raising(tmp_path, monkeypatch):
+    _fake_claude(tmp_path, monkeypatch, ["5"])
+    r = agents.run_claude("haiku", "prompt", agents.Opts(workdir=str(tmp_path), events=None))
+    assert r.ok is False

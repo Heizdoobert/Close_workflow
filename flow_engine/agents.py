@@ -72,7 +72,7 @@ class Opts:
     on_group: object = None  # called with the agent's process group id right after it starts (plan.py records it for recover)
     prompt_only: bool = False  # True: the prompt holds everything the call needs, no repo access. Only the api backend reads it (it has no tools)
     token_cap: int = 0  # api only: most tokens this call may spend (estimated input + max_tokens). 0 = no cap. CLI backends cannot be capped mid-call, so one running call can overshoot a plan's token budget
-    events: object = None  # a list: claude runs with stream-json and appends each tool call as {step, tool, file}. None: the json path, no events
+    events: object = None  # a list: claude runs with stream-json and appends each tool call as {step, turn, tool, file}. None: the json path, no events
     step: int = 0  # stamped on each recorded tool event
 
 
@@ -294,7 +294,7 @@ def run_claude(model, prompt, o):
                     if not isinstance(block, dict) or block.get("type") != "tool_use":
                         continue
                     inp = block.get("input") if isinstance(block.get("input"), dict) else {}
-                    o.events.append({"step": o.step + turn, "tool": block.get("name", ""), "file": inp.get("file_path") or inp.get("path") or ""})
+                    o.events.append({"step": o.step, "turn": turn, "tool": block.get("name", ""), "file": inp.get("file_path") or inp.get("path") or ""})
             elif obj.get("type") == "result":
                 r = obj
         if r is None:
@@ -304,6 +304,8 @@ def run_claude(model, prompt, o):
             out = json.loads(p.stdout)
             r = [e for e in out if e.get("type") == "result"][-1] if isinstance(out, list) else out
         except Exception:
+            return _fail(p.stderr or p.stdout or f"exit {p.returncode}", f"claude:{model}")
+        if not isinstance(r, dict):
             return _fail(p.stderr or p.stdout or f"exit {p.returncode}", f"claude:{model}")
     u = r.get("usage") if isinstance(r.get("usage"), dict) else {}
     tokens = dict(input_tokens=u.get("input_tokens", 0), cache_read=u.get("cache_read_input_tokens", 0),
