@@ -58,3 +58,33 @@ def test_no_failing_tasks_prints_run_next(analyze_dir, capsys):
 def test_no_runs_raises(analyze_dir):
     with pytest.raises(bench.BenchError, match='no run yet'):
         bench.cmd_analyze([])
+
+
+def test_analyze_skips_run_without_results(analyze_dir, capsys):
+    d = write_run(analyze_dir, 1, {'t1': 0})
+    write_trace(d, 't1', [{'kind': 'accept', 'exit': 1, 'out': 'x'}])
+    (analyze_dir / 'harness' / 'runs' / '2' / 'trace').mkdir(parents=True)
+    assert bench.cmd_analyze([]) == 0
+    assert any(line.startswith('unclassified: 1 failing: t1') for line in capsys.readouterr().out.splitlines())
+
+
+def test_absolute_event_path_is_classified(analyze_dir, capsys):
+    d = write_run(analyze_dir, 1, {'t1': 0})
+    write_trace(d, 't1', [{'kind': 'tool', 'step': 3, 'tool': 'Edit', 'file': '/tmp/bench-x/repo/flow_engine/gate.py'},
+                          {'kind': 'accept', 'exit': 1, 'out': 'x'}])
+    assert bench.cmd_analyze([]) == 0
+    assert 'gates: 1 failing: t1 [step 3]' in capsys.readouterr().out.splitlines()
+
+
+def test_mixed_steps_and_unclassified(analyze_dir, capsys):
+    d = write_run(analyze_dir, 1, {'t1': 0, 't2': 0, 't3': 0})
+    write_trace(d, 't1', [{'kind': 'tool', 'step': 1, 'tool': 'Edit', 'file': 'flow_engine/method.py'},
+                          {'kind': 'accept', 'exit': 1, 'out': 'x'}])
+    write_trace(d, 't2', [{'kind': 'tool', 'step': 4, 'tool': 'Edit', 'file': 'flow_engine/agents.py'},
+                          {'kind': 'accept', 'exit': 1, 'out': 'x'}])
+    write_trace(d, 't3', [{'kind': 'accept', 'exit': 1, 'out': 'x'}])
+    assert bench.cmd_analyze([]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert 'prompts: 1 failing: t1 [step 1]' in out
+    assert 'backends: 1 failing: t2 [step 4]' in out
+    assert 'unclassified: 1 failing: t3 [step 0]' in out

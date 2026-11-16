@@ -58,3 +58,12 @@ def test_first_run_number_is_one(change_dir):
     assert not (change_dir / 'harness' / 'runs').exists()
     assert bench.cmd_change(VALID) == 0
     assert (change_dir / 'harness' / 'manifest' / '1.json').is_file()
+
+
+def test_second_change_before_run_is_refused(change_dir):
+    assert bench.cmd_change(VALID) == 0
+    (change_dir / 'flow_engine' / 'agents.py').write_text('SECOND', encoding='utf-8')
+    with pytest.raises(bench.BenchError):
+        bench.cmd_change(VALID)
+    data = json.loads((change_dir / 'harness' / 'manifest' / '1.json').read_text(encoding='utf-8'))
+    assert data['snapshot']['flow_engine/agents.py'] == 'ORIGINAL'

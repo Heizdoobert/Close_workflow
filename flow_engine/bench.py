@@ -11,7 +11,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from flow_engine import agents
+from flow_engine import agents, sandbox
 
 BENCH = Path('harness') / 'bench'
 RUNS = Path('harness') / 'runs'
@@ -44,9 +44,17 @@ NEXT_ON_ERROR = {
 def class_of(path):
     p = Path(path).as_posix()
     for key, files in COMPONENTS.items():
-        if p in files:
-            return key
+        for f in files:
+            if p == f or p.endswith('/' + f):
+                return key
     return None
+
+
+def _safe_path(raw):
+    path = Path(raw[2:] if raw.startswith('./') else raw).as_posix()
+    if Path(path).is_absolute() or '..' in Path(path).parts or not any(path in files for files in COMPONENTS.values()):
+        raise BenchError(f'outside the 7 component dirs: {path}')
+    return path
 
 
 def tasks():
@@ -56,10 +64,10 @@ def tasks():
     return found
 
 
-def _numbered_runs():
+def _numbered_runs(complete_only=False):
     if not RUNS.is_dir():
         return []
-    return [int(d.name) for d in RUNS.iterdir() if d.is_dir() and re.fullmatch(r'\d+', d.name)]
+    return [int(d.name) for d in RUNS.iterdir() if d.is_dir() and re.fullmatch(r'\d+', d.name) and (not complete_only or (d / 'results.json').is_file())]
 
 
 def next_run():
@@ -67,7 +75,7 @@ def next_run():
 
 
 def latest_run():
-    nums = _numbered_runs()
+    nums = _numbered_runs(complete_only=True)
     return max(nums) if nums else None
 
 
@@ -79,13 +87,14 @@ def run_task(task_dir, n):
     tmp = tempfile.mkdtemp(prefix='bench-')
     repo = Path(tmp) / 'repo'
     try:
-        shutil.copytree(Path.cwd(), repo, ignore=shutil.ignore_patterns('.git', 'harness', '__pycache__'))
+        _copy_tracked(repo)
         events = []
         trace = []
         res, cost, tok = agents.call(chain(), (task_dir / 'task.md').read_text(encoding='utf-8'),
                                      agents.Opts(workdir=str(repo), tools='Read,Edit,Write,Bash,Glob,Grep',
                                                  budget=float(os.environ.get('FLOW_BENCH_USD', '0.50')), timeout=600, events=events),
                                      trace)
+        _relative_events(events, repo)
         try:
             p = subprocess.run(['bash', str((task_dir / 'accept.sh').resolve())], cwd=str(repo), capture_output=True, text=True, timeout=300)
             rc = p.returncode
@@ -100,19 +109,26 @@ def run_task(task_dir, n):
 
 
 def cmd_run(rest):
+    if sandbox.available() != 'bwrap' and os.environ.get('FLOW_BENCH_UNSANDBOXED') != '1':
+        raise BenchError('bench run needs the bwrap sandbox (bubblewrap); set FLOW_BENCH_UNSANDBOXED=1 to run without it')
+    todo = tasks()
     n = next_run()
-    trace_dir = RUNS / str(n) / 'trace'
+    run_dir = RUNS / str(n)
+    trace_dir = run_dir / 'trace'
     trace_dir.mkdir(parents=True)
     results = {}
-    for d in tasks():
-        r = run_task(d, n)
-        lines = [{'kind': 'attempt', **item} for item in r['trace']]
-        lines += [{'kind': 'tool', **ev} for ev in r['events']]
-        lines.append({'kind': 'accept', 'exit': r['accept_exit'], 'out': r['out']})
-        (trace_dir / (d.name + '.jsonl')).write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in lines), encoding='utf-8')
-        results[d.name] = {k: v for k, v in r.items() if k not in ('trace', 'events', 'out')}
-        print(f"task {d.name} reward={r['reward']} cost={r['cost_usd']} accept_exit={r['accept_exit']}")
-    (RUNS / str(n) / 'results.json').write_text(json.dumps({'run': n, 'tasks': results}, ensure_ascii=False, indent=2), encoding='utf-8')
+    try:
+        for d in todo:
+            r = run_task(d, n)
+            lines = [{'kind': 'attempt', **item} for item in r['trace']]
+            lines += [{'kind': 'tool', **ev} for ev in r['events']]
+            lines.append({'kind': 'accept', 'exit': r['accept_exit'], 'out': r['out']})
+            (trace_dir / (d.name + '.jsonl')).write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in lines), encoding='utf-8')
+            results[d.name] = {k: v for k, v in r.items() if k not in ('trace', 'events', 'out')}
+            print(f"task {d.name} reward={r['reward']} cost={r['cost_usd']} accept_exit={r['accept_exit']}")
+    finally:
+        complete = len(results) == len(todo)
+        (run_dir / 'results.json').write_text(json.dumps({'run': n, 'complete': complete, 'tasks': results}, ensure_ascii=False, indent=2), encoding='utf-8')
     print('NEXT: flow-task bench compare')
     return 0
 
@@ -138,12 +154,51 @@ def _change_args(rest):
 
 
 def _check_file(raw):
-    path = Path(raw[2:] if raw.startswith('./') else raw).as_posix()
-    if Path(path).is_absolute() or '..' in Path(path).parts or class_of(path) is None:
-        raise BenchError(f'outside the 7 component dirs: {path}')
+    path = _safe_path(raw)
     if not Path(path).is_file():
         raise BenchError(f'no such file: {path}')
     return path
+
+
+_SECRET_NAMES = ('.npmrc', '.netrc', 'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519')
+_SECRET_SUFFIXES = ('.pem', '.key', '.p12', '.pfx')
+
+
+def _secret_name(name):
+    return name.startswith('.env') or name in _SECRET_NAMES or name.lower().endswith(_SECRET_SUFFIXES)
+
+
+def _tracked_files():
+    p = subprocess.run(['git', 'ls-files', '-z'], capture_output=True)
+    if p.returncode != 0:
+        raise BenchError('bench run needs a git repo: git ls-files failed')
+    return [x for x in p.stdout.decode('utf-8', 'replace').split(chr(0)) if x]
+
+
+def _copy_tracked(repo):
+    repo.mkdir(parents=True, exist_ok=True)
+    for rel in _tracked_files():
+        if rel.startswith('harness/'):
+            continue
+        src = Path.cwd() / rel
+        if src.is_symlink() or not src.is_file() or _secret_name(src.name):
+            continue
+        dst = repo / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+
+
+def _relative_events(events, repo):
+    for ev in events:
+        f = ev.get('file') or ''
+        if not f or not Path(f).is_absolute():
+            continue
+        for base in (repo, repo.resolve()):
+            try:
+                ev['file'] = Path(f).relative_to(base).as_posix()
+                break
+            except ValueError:
+                continue
 
 
 def cmd_change(rest):
@@ -165,6 +220,8 @@ def cmd_change(rest):
         if name not in known:
             raise BenchError(f'unknown task: {name}')
     n = next_run()
+    if (MANIFEST / f'{n}.json').exists():
+        raise BenchError(f'manifest for run {n} already exists: one change per run, run the bench first')
     snapshot = {path: Path(path).read_text(encoding='utf-8') for path in files}
     manifest = {'run': n, 'files': files, 'evidence': fields['--evidence'], 'root': fields['--root'],
                 'fix': fields['--fix'], 'predict': predict, 'snapshot': snapshot}
@@ -215,7 +272,8 @@ def cmd_compare(rest):
         restore = bool(reason)
     restored = []
     if restore:
-        for path, text in manifest['snapshot'].items():
+        targets = [(_safe_path(path), text) for path, text in manifest['snapshot'].items()]
+        for path, text in targets:
             Path(path).write_text(text, encoding='utf-8')
             restored.append(path)
     eval_data = {'run': n, 'improvements': improvements, 'regressions': regressions, 'predicted_flip': predicted_flip,
@@ -280,6 +338,10 @@ def main(rest):
     try:
         return fn(rest[1:])
     except BenchError as e:
+        print('bench error: ' + str(e), file=sys.stderr)
+        print(NEXT_ON_ERROR[sub])
+        return 1
+    except (OSError, ValueError) as e:
         print('bench error: ' + str(e), file=sys.stderr)
         print(NEXT_ON_ERROR[sub])
         return 1
