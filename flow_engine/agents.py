@@ -275,6 +275,7 @@ def run_claude(model, prompt, o):
         return _fail(str(e), f"claude:{model}", False)
     if isinstance(o.events, list):
         r = None
+        turn = 0
         for line in p.stdout.splitlines():
             line = line.strip()
             if not line:
@@ -283,11 +284,17 @@ def run_claude(model, prompt, o):
                 obj = json.loads(line)
             except ValueError:
                 continue
+            if not isinstance(obj, dict):
+                continue
             if obj.get("type") == "assistant":
-                for block in (obj.get("message") or {}).get("content") or []:
-                    if block.get("type") == "tool_use":
-                        inp = block.get("input") or {}
-                        o.events.append({"step": o.step, "tool": block.get("name", ""), "file": inp.get("file_path") or inp.get("path") or ""})
+                turn += 1
+                msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+                blocks = msg.get("content") if isinstance(msg.get("content"), list) else []
+                for block in blocks:
+                    if not isinstance(block, dict) or block.get("type") != "tool_use":
+                        continue
+                    inp = block.get("input") if isinstance(block.get("input"), dict) else {}
+                    o.events.append({"step": o.step + turn, "tool": block.get("name", ""), "file": inp.get("file_path") or inp.get("path") or ""})
             elif obj.get("type") == "result":
                 r = obj
         if r is None:
@@ -298,7 +305,7 @@ def run_claude(model, prompt, o):
             r = [e for e in out if e.get("type") == "result"][-1] if isinstance(out, list) else out
         except Exception:
             return _fail(p.stderr or p.stdout or f"exit {p.returncode}", f"claude:{model}")
-    u = r.get("usage", {})
+    u = r.get("usage") if isinstance(r.get("usage"), dict) else {}
     tokens = dict(input_tokens=u.get("input_tokens", 0), cache_read=u.get("cache_read_input_tokens", 0),
                   cache_create=u.get("cache_creation_input_tokens", 0), output_tokens=u.get("output_tokens", 0))
     if p.returncode != 0 or r.get("is_error"):
