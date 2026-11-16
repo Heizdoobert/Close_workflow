@@ -97,7 +97,7 @@ def main(argv=None):
         return 0
     cmd, rest = a[0], a[1:]
     try:
-        if cmd == "bench" and rest and rest[0] in bench.SUBCOMMANDS:
+        if cmd == "bench":
             return bench.main(rest)
         if cmd == "doctor":
             return doctor()
