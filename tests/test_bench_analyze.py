@@ -31,6 +31,15 @@ def setup_failing(root):
     return d
 
 
+@pytest.mark.parametrize('tasks', [{'t1': 5}, {'t1': {'reward': 'x'}}])
+def test_bad_task_entry_is_bench_error(analyze_dir, capsys, tasks):
+    d = analyze_dir / 'harness' / 'runs' / '1'
+    d.mkdir(parents=True)
+    (d / 'results.json').write_text(json.dumps({'run': 1, 'tasks': tasks}), encoding='utf-8')
+    assert bench.main(['analyze']) == 1
+    assert 'bench error' in capsys.readouterr().err
+
+
 def test_overview_groups_by_class(analyze_dir, capsys):
     setup_failing(analyze_dir)
     assert bench.cmd_analyze([]) == 0

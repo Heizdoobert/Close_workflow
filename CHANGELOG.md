@@ -11,11 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `LICENSE` (MIT), `SECURITY.md`, `CHANGELOG.md` and `CONTRIBUTING.md`.
 - `tests/test_repo_files.py` checks that these files exist and carry their required content.
+- `flow-task bench run`, `compare`, `analyze` and `change`: stream-json tool events in `run_claude`, a manifest with 4 fields, and rollback on regression.
 
 ### Changed
 
 - Claims layer (anti-lying) before SHIP: step PASS/FAIL claims rerun at the step commit, `analysis.md` hash checked, one LLM cross-check; an unrun check is NO-GO (`FLOW_CLAIMS`, `FLOW_CLAIMS_USD`).
 - `pyproject.toml` declares the MIT license.
+
+### Security
+
+- Bench needs the bwrap sandbox (`FLOW_BENCH_UNSANDBOXED=1` opts out) and runs `accept.sh` with a scrubbed environment.
 
 ### Removed
 
