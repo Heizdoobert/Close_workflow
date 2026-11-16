@@ -78,3 +78,17 @@ def test_symlinked_component_file_is_refused(change_dir, capsys):
     assert 'bench error' in capsys.readouterr().err
     assert not (change_dir / 'harness' / 'manifest' / '1.json').exists()
     assert outside.read_text(encoding='utf-8') == 'OUTSIDE'
+
+
+def test_symlinked_component_dir_is_refused(change_dir, capsys):
+    outside_dir = change_dir.parent / f'{change_dir.name}-outside-dir'
+    outside_dir.mkdir()
+    (outside_dir / 'agents.py').write_text('OUTSIDE', encoding='utf-8')
+    (change_dir / 'flow_engine' / 'agents.py').unlink()
+    (change_dir / 'flow_engine' / 'method.py').unlink()
+    (change_dir / 'flow_engine').rmdir()
+    (change_dir / 'flow_engine').symlink_to(outside_dir, target_is_directory=True)
+    assert bench.main(['change'] + VALID) == 1
+    assert 'bench error' in capsys.readouterr().err
+    assert not (change_dir / 'harness' / 'manifest' / '1.json').exists()
+    assert (outside_dir / 'agents.py').read_text(encoding='utf-8') == 'OUTSIDE'

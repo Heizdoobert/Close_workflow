@@ -294,7 +294,11 @@ def run_claude(model, prompt, o):
                     if not isinstance(block, dict) or block.get("type") != "tool_use":
                         continue
                     inp = block.get("input") if isinstance(block.get("input"), dict) else {}
-                    o.events.append({"step": o.step, "turn": turn, "tool": block.get("name", ""), "file": inp.get("file_path") or inp.get("path") or ""})
+                    ev = {"step": o.step, "turn": turn, "tool": block.get("name", ""), "file": inp.get("file_path") or inp.get("path") or ""}
+                    if block.get("name") == "Bash":
+                        cmd = inp.get("command")
+                        ev["cmd"] = cmd[:120] if isinstance(cmd, str) else ""
+                    o.events.append(ev)
             elif obj.get("type") == "result":
                 r = obj
         if r is None:

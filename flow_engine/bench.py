@@ -315,8 +315,12 @@ def cmd_compare(rest):
     improvements = sum(1 for _, a, b in flips if a == 0 and b == 1)
     regressions = sum(1 for _, a, b in flips if a == 1 and b == 0)
     manifest_file = MANIFEST / f'{n}.json'
-    manifest = json.loads(manifest_file.read_text(encoding='utf-8')) if manifest_file.is_file() else None
+    manifest = None
     if manifest_file.is_file():
+        try:
+            manifest = json.loads(manifest_file.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            raise BenchError(f'bad manifest for run {n}')
         _check_manifest(manifest, n)
     predicted_flip = None
     reason = ''
@@ -364,7 +368,10 @@ def _failing_step_class(trace_path):
     if trace_path.is_file():
         for raw in trace_path.read_text(encoding='utf-8').splitlines():
             if raw.strip():
-                item = json.loads(raw)
+                try:
+                    item = json.loads(raw)
+                except ValueError:
+                    raise BenchError(f'bad trace line in {trace_path.name}')
                 if not isinstance(item, dict):
                     continue
                 if item.get('kind') == 'tool':

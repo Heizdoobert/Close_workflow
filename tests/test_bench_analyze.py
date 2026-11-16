@@ -139,3 +139,15 @@ def test_mixed_steps_and_unclassified(analyze_dir, capsys):
     assert 'prompts: 1 failing: t1 [step 1]' in out
     assert 'backends: 1 failing: t2 [step 4]' in out
     assert 'unclassified: 1 failing: t3 [step 0]' in out
+
+
+def test_truncated_trace_line_is_bench_error(analyze_dir, capsys):
+    d = write_run(analyze_dir, 1, {'t1': 0})
+    lines = [json.dumps({'kind': 'tool', 'step': 2, 'tool': 'Edit', 'file': 'flow_engine/gate.py'}),
+             '{"kind": "tool"',
+             json.dumps({'kind': 'accept', 'exit': 1, 'out': 'x'})]
+    (d / 'trace' / 't1.jsonl').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    assert bench.main(['analyze']) == 1
+    err = capsys.readouterr().err
+    assert 'bench error' in err
+    assert 'bad trace line in t1.jsonl' in err

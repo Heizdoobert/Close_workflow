@@ -1,6 +1,5 @@
 import json
 import os
-import shutil
 
 import pytest
 
@@ -17,7 +16,7 @@ def compare_dir(tmp_path, monkeypatch):
 
 def write_run(root, n, rewards, complete=None):
     d = root / 'harness' / 'runs' / str(n)
-    d.mkdir(parents=True)
+    d.mkdir(parents=True, exist_ok=True)
     tasks = {name: {'reward': r} for name, r in rewards.items()}
     payload = {'run': n, 'tasks': tasks}
     if complete is not None:
@@ -173,7 +172,7 @@ def write_regressing_manifest(root, snapshot):
     write_run(root, 1, {'t1': 1, 't2': 1})
     write_run(root, 2, {'t1': 0, 't2': 0})
     d = root / 'harness' / 'manifest'
-    d.mkdir(parents=True)
+    d.mkdir(parents=True, exist_ok=True)
     manifest = {'run': 2, 'files': [], 'predict': ['t1'], 'snapshot': snapshot}
     (d / '2.json').write_text(json.dumps(manifest), encoding='utf-8')
 
@@ -191,15 +190,18 @@ def test_restore_checks_all_targets_before_writing(compare_dir, tmp_path):
     assert (outside / 'secret.py').read_text(encoding='utf-8') == 'OUTSIDE'
 
 
+def _assert_refuses_outside_cwd(compare_dir, tmp_path, key):
+    write_regressing_manifest(compare_dir, {key: 'X'})
+    with pytest.raises(bench.BenchError):
+        bench.cmd_compare([])
+    assert not (compare_dir / 'evil.py').exists()
+    assert not (tmp_path.parent / 'evil.py').exists()
+
+
 def test_restore_refuses_paths_outside_cwd(compare_dir, tmp_path):
-    # one manifest per case, so each key is checked on its own
-    for key in ['../evil.py', str(tmp_path / 'evil.py')]:
-        shutil.rmtree(compare_dir / 'harness', ignore_errors=True)
-        write_regressing_manifest(compare_dir, {key: 'X'})
-        with pytest.raises(bench.BenchError):
-            bench.cmd_compare([])
-        assert not (compare_dir / 'evil.py').exists()
-        assert not (tmp_path.parent / 'evil.py').exists()
+    # relative and absolute key, each checked on its own (the def line stays as it was)
+    _assert_refuses_outside_cwd(compare_dir, tmp_path, '../evil.py')
+    _assert_refuses_outside_cwd(compare_dir, tmp_path, str(tmp_path / 'evil.py'))
 
 
 def test_restore_refuses_symlinked_parent_dir(compare_dir):
@@ -216,18 +218,35 @@ def test_restore_refuses_symlinked_parent_dir(compare_dir):
 
 
 @pytest.mark.parametrize('manifest', [
-    {'run': 2, 'files': [], 'predict': ['t1']},
-    {'run': 2, 'files': [], 'predict': ['t1'], 'snapshot': ['flow_engine/agents.py']},
-    {'run': 2, 'files': [], 'predict': ['t1', 5], 'snapshot': {'flow_engine/agents.py': 'ORIGINAL'}},
+    json.dumps({'run': 2, 'files': [], 'predict': ['t1']}),
+    json.dumps({'run': 2, 'files': [], 'predict': ['t1'], 'snapshot': ['flow_engine/agents.py']}),
+    json.dumps({'run': 2, 'files': [], 'predict': ['t1', 5], 'snapshot': {'flow_engine/agents.py': 'ORIGINAL'}}),
+    '[]',
+    '5',
+    json.dumps({'run': 2, 'files': [], 'predict': 't1', 'snapshot': {'flow_engine/agents.py': 'ORIGINAL'}}),
 ])
 def test_bad_manifest_is_bench_error(compare_dir, capsys, manifest):
     write_run(compare_dir, 1, {'t1': 0})
     write_run(compare_dir, 2, {'t1': 0})
     d = compare_dir / 'harness' / 'manifest'
     d.mkdir(parents=True)
-    (d / '2.json').write_text(json.dumps(manifest), encoding='utf-8')
+    (d / '2.json').write_text(manifest, encoding='utf-8')
     assert bench.main(['compare']) == 1
-    assert 'bench error' in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert 'bench error' in err
+    assert 'bad manifest for run 2' in err
+
+
+def test_unparsable_manifest_is_bench_error(compare_dir, capsys):
+    write_run(compare_dir, 1, {'t1': 0})
+    write_run(compare_dir, 2, {'t1': 0})
+    d = compare_dir / 'harness' / 'manifest'
+    d.mkdir(parents=True)
+    (d / '2.json').write_text('nope', encoding='utf-8')
+    assert bench.main(['compare']) == 1
+    err = capsys.readouterr().err
+    assert 'bench error' in err
+    assert 'bad manifest for run 2' in err
 
 
 def test_infinite_reward_is_bench_error(compare_dir, capsys):

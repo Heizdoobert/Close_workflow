@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `LICENSE` (MIT), `SECURITY.md`, `CHANGELOG.md` and `CONTRIBUTING.md`.
 - `tests/test_repo_files.py` checks that these files exist and carry their required content.
 - `flow-task bench run`, `compare`, `analyze` and `change`: stream-json tool events in `run_claude`, a manifest with 4 fields, and rollback on regression.
+- `flow-task bench`: Bash tool events carry `cmd` (the first 120 characters of the command).
 
 ### Changed
 
