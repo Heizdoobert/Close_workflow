@@ -217,3 +217,44 @@ def cmd_compare(rest):
         print('kept run N changes')
     print('NEXT: flow-task bench analyze')
     return 0
+
+
+def _failing_step_class(trace_path):
+    lines = []
+    if trace_path.is_file():
+        for raw in trace_path.read_text(encoding='utf-8').splitlines():
+            if raw.strip():
+                item = json.loads(raw)
+                if item.get('kind') == 'tool':
+                    lines.append(item)
+    if not lines:
+        return 0, 'unclassified'
+    step = lines[-1].get('step', 0)
+    touched = [line.get('file', '') for line in lines if line.get('step', 0) == step and line.get('file')]
+    cls = next((c for c in (class_of(f) for f in touched) if c is not None), 'unclassified')
+    return step, cls
+
+
+def cmd_analyze(rest):
+    n = latest_run()
+    if n is None:
+        raise BenchError('no run yet: flow-task bench run')
+    results = json.loads((RUNS / str(n) / 'results.json').read_text(encoding='utf-8'))
+    failing = sorted(name for name, item in results['tasks'].items() if int(item.get('reward', 0)) == 0)
+    if not failing:
+        print(f'no failing tasks in run {n}')
+        print('NEXT: flow-task bench run')
+        return 0
+    groups = {}
+    for task in failing:
+        step, cls = _failing_step_class(RUNS / str(n) / 'trace' / f'{task}.jsonl')
+        groups.setdefault(cls, []).append((task, f'[step {step}]'))
+    order = sorted(groups, key=lambda c: (-len(groups[c]), c))
+    for cls in order:
+        items = ', '.join(f'{task} {key}' for task, key in groups[cls])
+        print(f'{cls}: {len(groups[cls])} failing: {items}')
+    top = order[0]
+    top_file = COMPONENTS[top][0] if top in COMPONENTS else 'FILE'
+    predict = ','.join(task for task, _ in groups[top])
+    print(f'NEXT: flow-task bench change --file {top_file} --evidence <E> --root <R> --fix <X> --predict {predict}')
+    return 0
