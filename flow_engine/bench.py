@@ -174,8 +174,14 @@ def _change_args(rest):
 
 def _check_file(raw):
     path = _safe_path(raw)
+    if Path(path).is_symlink():
+        raise BenchError(f'refusing a symlink: {path}')
     if not Path(path).is_file():
         raise BenchError(f'no such file: {path}')
+    try:
+        Path(path).resolve().relative_to(Path.cwd().resolve())
+    except ValueError:
+        raise BenchError(f'refusing a path outside the repo: {path}')
     return path
 
 
@@ -267,7 +273,7 @@ def _load_results(n):
             raise BenchError(f'bad results file for run {n}: bad task entry {name}')
         try:
             int(item.get('reward', 0))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             raise BenchError(f'bad results file for run {n}: bad task entry {name}')
     return parsed
 
@@ -275,6 +281,18 @@ def _load_results(n):
 def _rewards(n):
     data = _load_results(n)
     return {name: int(item.get('reward', 0)) for name, item in data['tasks'].items()}
+
+
+def _check_manifest(manifest, n):
+    bad = BenchError(f'bad manifest for run {n}')
+    if not isinstance(manifest, dict):
+        raise bad
+    predict = manifest.get('predict')
+    if not isinstance(predict, list) or not all(isinstance(p, str) for p in predict):
+        raise bad
+    snapshot = manifest.get('snapshot')
+    if not isinstance(snapshot, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in snapshot.items()):
+        raise bad
 
 
 def cmd_compare(rest):
@@ -298,6 +316,8 @@ def cmd_compare(rest):
     regressions = sum(1 for _, a, b in flips if a == 1 and b == 0)
     manifest_file = MANIFEST / f'{n}.json'
     manifest = json.loads(manifest_file.read_text(encoding='utf-8')) if manifest_file.is_file() else None
+    if manifest_file.is_file():
+        _check_manifest(manifest, n)
     predicted_flip = None
     reason = ''
     restore = False
@@ -345,6 +365,8 @@ def _failing_step_class(trace_path):
         for raw in trace_path.read_text(encoding='utf-8').splitlines():
             if raw.strip():
                 item = json.loads(raw)
+                if not isinstance(item, dict):
+                    continue
                 if item.get('kind') == 'tool':
                     lines.append(item)
     if not lines:
@@ -392,11 +414,7 @@ def main(rest):
     fn = {'run': cmd_run, 'compare': cmd_compare, 'analyze': cmd_analyze, 'change': cmd_change}[sub]
     try:
         return fn(rest[1:])
-    except BenchError as e:
-        print('bench error: ' + str(e), file=sys.stderr)
-        print(NEXT_ON_ERROR[sub])
-        return 1
-    except (OSError, ValueError) as e:
+    except (BenchError, OSError, ValueError, KeyError, AttributeError, TypeError, OverflowError) as e:
         print('bench error: ' + str(e), file=sys.stderr)
         print(NEXT_ON_ERROR[sub])
         return 1

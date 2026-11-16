@@ -67,3 +67,14 @@ def test_second_change_before_run_is_refused(change_dir):
         bench.cmd_change(VALID)
     data = json.loads((change_dir / 'harness' / 'manifest' / '1.json').read_text(encoding='utf-8'))
     assert data['snapshot']['flow_engine/agents.py'] == 'ORIGINAL'
+
+
+def test_symlinked_component_file_is_refused(change_dir, capsys):
+    outside = change_dir.parent / f'{change_dir.name}-outside.py'
+    outside.write_text('OUTSIDE', encoding='utf-8')
+    (change_dir / 'flow_engine' / 'agents.py').unlink()
+    (change_dir / 'flow_engine' / 'agents.py').symlink_to(outside)
+    assert bench.main(['change'] + VALID) == 1
+    assert 'bench error' in capsys.readouterr().err
+    assert not (change_dir / 'harness' / 'manifest' / '1.json').exists()
+    assert outside.read_text(encoding='utf-8') == 'OUTSIDE'

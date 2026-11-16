@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - Bench needs the bwrap sandbox (`FLOW_BENCH_UNSANDBOXED=1` opts out) and runs `accept.sh` with a scrubbed environment.
+- Bench: corrupt results, trace or manifest files and symlinked component paths now give `bench error` instead of a traceback or an outside-repo read.
 
 ### Removed
 

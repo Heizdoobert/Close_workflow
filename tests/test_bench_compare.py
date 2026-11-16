@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 
 import pytest
 
@@ -191,11 +192,14 @@ def test_restore_checks_all_targets_before_writing(compare_dir, tmp_path):
 
 
 def test_restore_refuses_paths_outside_cwd(compare_dir, tmp_path):
-    write_regressing_manifest(compare_dir, {'../evil.py': 'X', str(tmp_path / 'evil.py'): 'Y'})
-    with pytest.raises(bench.BenchError):
-        bench.cmd_compare([])
-    assert not (compare_dir / 'evil.py').exists()
-    assert not (tmp_path.parent / 'evil.py').exists()
+    # one manifest per case, so each key is checked on its own
+    for key in ['../evil.py', str(tmp_path / 'evil.py')]:
+        shutil.rmtree(compare_dir / 'harness', ignore_errors=True)
+        write_regressing_manifest(compare_dir, {key: 'X'})
+        with pytest.raises(bench.BenchError):
+            bench.cmd_compare([])
+        assert not (compare_dir / 'evil.py').exists()
+        assert not (tmp_path.parent / 'evil.py').exists()
 
 
 def test_restore_refuses_symlinked_parent_dir(compare_dir):
@@ -209,3 +213,26 @@ def test_restore_refuses_symlinked_parent_dir(compare_dir):
     with pytest.raises(bench.BenchError):
         bench.cmd_compare([])
     assert (real / 'agents.py').read_text(encoding='utf-8') == 'OUTSIDE'
+
+
+@pytest.mark.parametrize('manifest', [
+    {'run': 2, 'files': [], 'predict': ['t1']},
+    {'run': 2, 'files': [], 'predict': ['t1'], 'snapshot': ['flow_engine/agents.py']},
+    {'run': 2, 'files': [], 'predict': ['t1', 5], 'snapshot': {'flow_engine/agents.py': 'ORIGINAL'}},
+])
+def test_bad_manifest_is_bench_error(compare_dir, capsys, manifest):
+    write_run(compare_dir, 1, {'t1': 0})
+    write_run(compare_dir, 2, {'t1': 0})
+    d = compare_dir / 'harness' / 'manifest'
+    d.mkdir(parents=True)
+    (d / '2.json').write_text(json.dumps(manifest), encoding='utf-8')
+    assert bench.main(['compare']) == 1
+    assert 'bench error' in capsys.readouterr().err
+
+
+def test_infinite_reward_is_bench_error(compare_dir, capsys):
+    write_run(compare_dir, 1, {'t1': float('inf')})
+    assert bench.main(['compare']) == 1
+    err = capsys.readouterr().err
+    assert 'bench error' in err
+    assert 'run 1' in err
