@@ -16,18 +16,23 @@ def test_bench_word_alone_still_submits_task(cli_env, monkeypatch, capsys):
     seen = []
     monkeypatch.setattr(bench, 'main', lambda rest: seen.append(rest) or 0)
     assert cli.main(['bench']) == 0
-    assert seen == []
-    assert cli_env == ['bench']
-    assert 'Task stored' in capsys.readouterr().out
+    assert seen == [[]]
+    assert cli_env == []
 
 
 def test_bench_unknown_word_still_submits_task(cli_env, monkeypatch, capsys):
     seen = []
     monkeypatch.setattr(bench, 'main', lambda rest: seen.append(rest) or 0)
     assert cli.main(['bench', 'nope']) == 0
-    assert seen == []
-    assert cli_env == ['bench']
-    assert 'Task stored' in capsys.readouterr().out
+    assert seen == [['nope']]
+    assert cli_env == []
+
+
+def test_bench_alone_prints_usage(cli_env, capsys):
+    assert cli.main(['bench']) == 1
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-1].startswith('NEXT: flow-task bench run')
+    assert cli_env == []
 
 
 def test_bench_subcommand_is_dispatched(cli_env, monkeypatch):
