@@ -87,3 +87,32 @@ def test_first_run_prints_next_and_writes_no_eval(compare_dir, capsys):
 def test_no_runs_raises(compare_dir):
     with pytest.raises(bench.BenchError, match='no run yet'):
         bench.cmd_compare([])
+
+
+def test_restore_rejects_unsafe_manifest_path(compare_dir):
+    write_run(compare_dir, 1, {'t1': 1, 't2': 1})
+    write_run(compare_dir, 2, {'t1': 0, 't2': 0})
+    d = compare_dir / 'harness' / 'manifest'
+    d.mkdir(parents=True)
+    (d / '2.json').write_text(json.dumps({'run': 2, 'files': [], 'predict': ['t1'],
+                                          'snapshot': {'../evil.py': 'X', 'flow_engine/agents.py': 'ORIGINAL'}}), encoding='utf-8')
+    with pytest.raises(bench.BenchError):
+        bench.cmd_compare([])
+    assert (compare_dir / 'flow_engine' / 'agents.py').read_text(encoding='utf-8') == 'CHANGED'
+    assert not (compare_dir / 'evil.py').exists()
+
+
+def test_latest_run_skips_dir_without_results(compare_dir, capsys):
+    write_run(compare_dir, 1, {'t1': 0})
+    (compare_dir / 'harness' / 'runs' / '2' / 'trace').mkdir(parents=True)
+    assert bench.cmd_compare([]) == 0
+    assert capsys.readouterr().out.splitlines()[-1] == 'NEXT: flow-task bench analyze'
+    assert not (compare_dir / 'harness' / 'runs' / '1' / 'eval.json').exists()
+
+
+def test_corrupt_results_is_bench_error(compare_dir, capsys):
+    write_run(compare_dir, 1, {'t1': 1})
+    (compare_dir / 'harness' / 'runs' / '2').mkdir(parents=True)
+    (compare_dir / 'harness' / 'runs' / '2' / 'results.json').write_text('nope', encoding='utf-8')
+    assert bench.main(['compare']) == 1
+    assert 'bench error' in capsys.readouterr().err
