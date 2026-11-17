@@ -253,6 +253,15 @@ def _run(cmd, o, stdin=None, env=None):
         return subprocess.CompletedProcess(cmd, p.returncode, out, err)
 
 
+def _tool_result_text(content):
+    """A tool_result content is a string or a list of {type: 'text', text} blocks."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text" and isinstance(b.get("text"), str))
+    return ""
+
+
 def run_claude(model, prompt, o):
     exe = claude_bin()
     if not exe:
@@ -278,6 +287,7 @@ def run_claude(model, prompt, o):
     if isinstance(o.events, list):
         r = None
         turn = 0
+        by_id = {}  # tool_use id -> its trace event, so a later tool_result can attach its error
         for line in p.stdout.splitlines():
             line = line.strip()
             if not line:
@@ -301,10 +311,30 @@ def run_claude(model, prompt, o):
                         cmd = inp.get("command")
                         ev["cmd"] = secrets.redact(cmd)[:120] if isinstance(cmd, str) else ""  # redact first: a cut token would escape the pattern
                     o.events.append(ev)
+                    if isinstance(block.get("id"), str):
+                        by_id[block["id"]] = ev
+            elif obj.get("type") == "user":
+                msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+                blocks = msg.get("content") if isinstance(msg.get("content"), list) else []
+                for block in blocks:
+                    if not isinstance(block, dict) or block.get("type") != "tool_result" or block.get("is_error") is not True:
+                        continue
+                    tid = block.get("tool_use_id")
+                    if not isinstance(tid, str) or tid not in by_id:
+                        continue
+                    ev = by_id[tid]
+                    text = _tool_result_text(block.get("content"))
+                    ev["error"] = secrets.redact(text)[:120]  # redact first, as for cmd
+                    if "No such tool available" in text:
+                        ev["denied"] = True
             elif obj.get("type") == "result":
                 r = obj
         if r is None:
             return _fail(p.stderr or p.stdout or f"exit {p.returncode}", f"claude:{model}")
+        if isinstance(r.get("permission_denials"), list):
+            for d in r["permission_denials"]:
+                if isinstance(d, dict) and isinstance(d.get("tool_use_id"), str) and d["tool_use_id"] in by_id:
+                    by_id[d["tool_use_id"]]["denied"] = True
     else:
         try:
             out = json.loads(p.stdout)
