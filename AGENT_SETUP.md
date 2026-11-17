@@ -123,9 +123,10 @@ Commands you will use: `flow-task where` (state and next action), `show <plan>`,
 
 ## Bench (harness A-D)
 - Layout: one task per folder, `harness/bench/<task>/task.md` (what to fix) and `harness/bench/<task>/accept.sh`. Reward = the exit code of `accept.sh` (0 = pass, 1 = fail); nothing else is scored.
-- `flow-task bench run`: runs every task and writes `harness/runs/<N>/results.json` and `harness/runs/<N>/trace/<task>.jsonl` (the step-indexed tool events).
-- `flow-task bench compare`: diffs run N against N-1 (flips, regressions) and writes `harness/runs/<N>/eval.json` with the reason.
-- `flow-task bench analyze`: groups the failing tasks by step and by one of 7 component classes and prints a short overview.
-- `flow-task bench change --file F --evidence E --root R --fix X --predict T1,T2`: records the change in `harness/manifest/<N>.json` (4 fields, at most 2 files, only paths in the 7 component dirs).
+- `flow-task bench run`: runs every task and writes `harness/runs/<N>/results.json` and `harness/runs/<N>/trace/<task>.jsonl`. The trace holds the tool events per turn, each with `error` and `denied` taken from the tool results (a refused call is marked `denied`).
+- `flow-task bench compare`: diffs run N against N-1 (flips, regressions) and writes `harness/runs/<N>/eval.json` with the reason. It prints cost and turn totals for both runs and splits regressions into expected (in `--risk`) and unexpected.
+- `flow-task bench analyze`: groups the failing tasks by turn and by one of 7 component classes (22 files listed in `COMPONENTS`) and prints a short overview. A refused call in the last turn counts as `backends`.
+- `flow-task bench change --file F --evidence E --root R --fix X --predict T1,T2`: records the change in `harness/manifest/<N>.json` (4 fields, at most 2 files, only paths listed in `COMPONENTS`). `--predict none` stores an empty predict list; `--risk T1,T2` lists tasks that may regress on purpose. The last line is `NEXT: edit the files, then: flow-task bench run`.
+- `bench.py` is not in `COMPONENTS` on purpose, so the loop cannot edit its own measure.
 - Rule: `compare` restores the manifest's files to the N-1 snapshot when regressions are more than flips, or when no predicted task flipped. The reason is written to `eval.json`.
 - Every bench command ends with a `NEXT:` line that names the next command. Follow it.
