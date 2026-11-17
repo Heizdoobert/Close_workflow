@@ -358,7 +358,7 @@ def cmd_compare(rest):
             flips.append((name, a, b))
             print(f'{name}: {a}->{b}')
     cost_a, cost_b = _total(prev_tasks, 'cost_usd'), _total(cur_tasks, 'cost_usd')
-    pct = f' (+{(cost_b - cost_a) / cost_a * 100:.1f}%)' if cost_a else ''
+    pct = f' ({(cost_b - cost_a) / cost_a * 100:+.1f}%)' if cost_a else ''
     print(f'cost {cost_a:.4f} -> {cost_b:.4f} USD{pct}')
     turns_a, turns_b = _turn_total(prev_tasks), _turn_total(cur_tasks)
     turns = None if turns_a is None or turns_b is None else [turns_a, turns_b]

@@ -366,6 +366,13 @@ def test_cost_percent_shows_increase(compare_dir, capsys):
     assert 'cost 0.2000 -> 0.3000 USD (+50.0%)' in capsys.readouterr().out.splitlines()
 
 
+def test_cost_percent_shows_decrease_with_one_sign(compare_dir, capsys):
+    write_rich_run(compare_dir, 1, {'t1': {'reward': 1, 'cost_usd': 0.4, 'turns': 1}})
+    write_rich_run(compare_dir, 2, {'t1': {'reward': 1, 'cost_usd': 0.3, 'turns': 1}})
+    assert bench.cmd_compare([]) == 0
+    assert 'cost 0.4000 -> 0.3000 USD (-25.0%)' in capsys.readouterr().out.splitlines()
+
+
 def test_old_results_without_turns_print_turns_na(compare_dir, capsys):
     write_run(compare_dir, 1, {'t1': 0})
     write_rich_run(compare_dir, 2, {'t1': {'reward': 1, 'turns': 2}})
