@@ -427,7 +427,7 @@ def cmd_compare(rest):
     return 0
 
 
-def _failing_step_class(trace_path):
+def _tool_events(trace_path):
     lines = []
     if trace_path.is_file():
         for raw in trace_path.read_text(encoding='utf-8').splitlines():
@@ -440,13 +440,25 @@ def _failing_step_class(trace_path):
                     continue
                 if item.get('kind') == 'tool':
                     lines.append(item)
+    return lines
+
+
+def _denied(trace_path):
+    return sum(1 for item in _tool_events(trace_path) if item.get('denied') is True)
+
+
+def _failing_step_class(trace_path):
+    lines = _tool_events(trace_path)
     if not lines:
         return 0, 'unclassified'
     def turn_of(item):
         return item.get('turn', item.get('step', 0))
 
     turn = turn_of(lines[-1])
-    touched = [line.get('file', '') for line in lines if turn_of(line) == turn and line.get('file')]
+    last = [line for line in lines if turn_of(line) == turn]
+    if any(line.get('denied') is True for line in last):
+        return turn, 'backends'
+    touched = [line.get('file', '') for line in last if line.get('file')]
     cls = next((c for c in (class_of(f) for f in touched) if c is not None), 'unclassified')
     return turn, cls
 
@@ -455,16 +467,20 @@ def cmd_analyze(rest):
     n = latest_run()
     if n is None:
         raise BenchError('no run yet: flow-task bench run')
+    _warn_incomplete(n)
     results = _load_results(n)
     failing = sorted(name for name, item in results['tasks'].items() if int(item.get('reward', 0)) == 0)
     if not failing:
-        print(f'no failing tasks in run {n}')
+        print(f'no failing tasks in run {n}: the bench is saturated, add a task that fails under harness/bench/')
         print('NEXT: flow-task bench run')
         return 0
     groups = {}
     for task in failing:
-        step, cls = _failing_step_class(RUNS / str(n) / 'trace' / f'{task}.jsonl')
-        groups.setdefault(cls, []).append((task, f'[step {step}]'))
+        trace_path = RUNS / str(n) / 'trace' / f'{task}.jsonl'
+        turn, cls = _failing_step_class(trace_path)
+        denied = _denied(trace_path)
+        label = f'[turn {turn}, {denied} denied]' if denied else f'[turn {turn}]'
+        groups.setdefault(cls, []).append((task, label))
     order = sorted(groups, key=lambda c: (-len(groups[c]), c))
     for cls in order:
         items = ', '.join(f'{task} {key}' for task, key in groups[cls])
