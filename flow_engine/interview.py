@@ -158,7 +158,7 @@ def run_cli(goal, model=None, ask=input, out=print):
     """The interactive loop: ask, listen, and once the user confirms the brief, draft the plan. Returns the plan id."""
     from flow_engine import plan
     wd = plan.repo()
-    chain, qa, cost, rounds = agents.chain_from_env("claude:haiku", model), [], 0.0, int(os.environ.get("FLOW_INTERVIEW_ROUNDS", "8"))
+    chain, qa, cost, rounds = agents.chain_from_env(None, model), [], 0.0, int(os.environ.get("FLOW_INTERVIEW_ROUNDS", "8"))
     while True:
         r = step(goal, qa, chain, wd, rounds)
         cost += r["cost_usd"]
@@ -185,7 +185,7 @@ def main_step(goal, qa_file=None, model=None):
     """For agents without a terminal: one round as JSON on stdout. The agent asks the user, appends {q, a} to the qa file and calls again."""
     from flow_engine import plan
     qa = json.loads(open(qa_file, encoding="utf-8").read()) if qa_file and os.path.exists(qa_file) else []
-    r = step(goal, qa, agents.chain_from_env("claude:haiku", model), plan.repo())
+    r = step(goal, qa, agents.chain_from_env(None, model), plan.repo())
     if r["brief"]:
         r["brief"] = {**r["brief"], "qa": qa, "cost_usd": r["cost_usd"]}
     print(json.dumps(r, ensure_ascii=False))

@@ -17,3 +17,4 @@ __pycache__/
 last_session_result.json
 plans/
 vendor/
+config.toml

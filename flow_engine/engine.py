@@ -28,7 +28,35 @@ def load_env():
                 os.environ.setdefault(k.strip(), v.strip())
 
 
+# config.toml [models] key -> the env var the engine already reads
+CONFIG_KEYS = {"task": "FLOW_MODEL", "default": "FLOW_DEFAULT_BACKEND", "bench": "FLOW_BENCH_BACKENDS", "backends": "FLOW_BACKENDS", "parent": "FLOW_PARENT_MODEL"}
+
+
+def load_config():
+    """Read ROOT/config.toml [models] into os.environ without overriding the caller's env or .env. An empty value means unset.
+    A broken file is an error, not a silent fall back to the default model."""
+    f = ROOT / "config.toml"
+    if not f.is_file():
+        return
+    try:
+        import tomllib
+    except ImportError:  # Python < 3.11 has no TOML reader
+        raise RuntimeError(f"{f} needs Python 3.11+ (tomllib); remove it or set the FLOW_* env vars instead")
+    try:
+        models = tomllib.loads(f.read_text(encoding="utf-8")).get("models", {})
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+        raise RuntimeError(f"bad {f}: {e}")
+    if not isinstance(models, dict):
+        raise RuntimeError(f"bad {f}: [models] must be a table")
+    for key, value in models.items():
+        if key not in CONFIG_KEYS or not isinstance(value, str):
+            raise RuntimeError(f"bad {f}: models.{key} (known keys: {', '.join(CONFIG_KEYS)}; values are strings)")
+        if value.strip():
+            os.environ.setdefault(CONFIG_KEYS[key], value.strip())
+
+
 load_env()
+load_config()
 
 
 def now():

@@ -76,6 +76,9 @@ def doctor():
         print(f"{'OK  ' if ok else ('FAIL' if req else 'warn')}  {name:<13} {detail}")
     for line in doctor_api.report():
         print(line)
+    env = os.environ.get
+    print(f"models task={env('FLOW_MODEL', 'haiku')} default={env('FLOW_DEFAULT_BACKEND', 'claude:haiku')} bench={env('FLOW_BENCH_BACKENDS', 'claude:haiku')}"
+          f" backends={env('FLOW_BACKENDS') or '-'} parent={env('FLOW_PARENT_MODEL') or '-'} (config.toml: {'yes' if (engine.ROOT / 'config.toml').is_file() else 'no'})")
     return 0 if all(ok for _, ok, _, req in checks if req) else 1
 
 

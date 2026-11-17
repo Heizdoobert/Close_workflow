@@ -436,12 +436,13 @@ def require_model(parent_model):
         raise ValueError("FLOW_REQUIRE_MODEL=1: pass --model <your own model id> (e.g. gemini-3.8-flash-high)")
 
 
-def chain_from_env(default="claude:haiku", parent_model=None, role="code"):
+def chain_from_env(default=None, parent_model=None, role="code"):
+    """default None = FLOW_DEFAULT_BACKEND (config.toml models.default, a comma-separated chain), else claude:haiku."""
     if os.environ.get("FLOW_BACKENDS"):  # an explicit chain always wins
         return [s.strip() for s in os.environ["FLOW_BACKENDS"].split(",") if s.strip()]
     chain = policy_chain(parent_model or os.environ.get("FLOW_PARENT_MODEL"), role)
     out = []
-    for s in chain or [default]:
+    for s in chain or [x.strip() for x in (default or os.environ.get("FLOW_DEFAULT_BACKEND") or "claude:haiku").split(",") if x.strip()]:
         if s not in out:
             out.append(s)
     api_rung = os.environ.get(f"FLOW_POLICY_API_{role.upper()}")  # optional last rung per role; unset = no change

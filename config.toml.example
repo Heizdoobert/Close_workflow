@@ -1,0 +1,16 @@
+# Copy to config.toml (next to this file, in FLOW_HOME) and edit. Needs Python 3.11+.
+# Order: a real env var wins, then .env, then this file. An empty value means "not set".
+# A backend spec is "claude:<model>", "agy:<model-id>", "opencode[:provider/model]" or "api:<provider>/<model>".
+# Suffix "!" pins a model (never falls back), "+" retries it longer before falling back.
+
+[models]
+# Single tasks (flow-task enqueue / exec): a claude model name.            -> FLOW_MODEL
+task = "haiku"
+# Plans, interview: used when the caller passes no --model. Comma-separated chain allowed. -> FLOW_DEFAULT_BACKEND
+default = "claude:haiku"
+# flow-task bench run.                                                     -> FLOW_BENCH_BACKENDS
+bench = "claude:haiku"
+# Explicit chain for EVERY call; overrides --model and the two lines above (not bench). -> FLOW_BACKENDS
+backends = ""
+# Pretend every caller is this model (applies the parent-model policy).    -> FLOW_PARENT_MODEL
+parent = ""

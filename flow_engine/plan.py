@@ -275,10 +275,10 @@ def create(goal, parent_model=None, brief=None):
     pid = time.strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2)
     d = plans_dir() / pid
     d.mkdir(parents=True)
-    chain = agents.chain_from_env("claude:haiku", parent_model, "general")
+    chain = agents.chain_from_env(None, parent_model, "general")
     ctx = (interview.text(brief) if brief else "") + bridge.recall(goal)
     trace, cost, calls = [], 0.0, []
-    code_chain = agents.chain_from_env("claude:haiku", parent_model, "code")
+    code_chain = agents.chain_from_env(None, parent_model, "code")
     if os.environ.get("FLOW_MAP", "1") == "1" and code_chain[:1] != chain[:1]:  # the hands search the repo, the head plans from their quoted facts
         res, c, tok = agents.call(code_chain, method.map_prompt(goal), agents.Opts(wd, agents.READ_TOOLS, float(os.environ.get("FLOW_MAP_USD", "0.10")), 300), trace)
         cost += c
@@ -524,8 +524,8 @@ class Ctx:
         self.repo, self.branch = plan.get("repo") or repo(), f"flow/{pid}"
         self.plan_wt = d / "wt" / "_plan"
         self.slock, self.glock, self.mlock = threading.Lock(), threading.Lock(), threading.Lock()
-        self.chain = agents.chain_from_env("claude:haiku", state.get("parent_model"), "general")  # planner-side work: non-code steps, review, SHIP
-        self.code_chain = agents.chain_from_env("claude:haiku", state.get("parent_model"), "code")
+        self.chain = agents.chain_from_env(None, state.get("parent_model"), "general")  # planner-side work: non-code steps, review, SHIP
+        self.code_chain = agents.chain_from_env(None, state.get("parent_model"), "code")
         self.budget = float(os.environ.get("FLOW_PLAN_MAX_USD", "3.0"))
         self.step_usd = float(os.environ.get("FLOW_STEP_USD", "0.40"))  # per-step estimate: what a launch reserves from the budget
         self.reserved = {}  # sid -> USD still reserved for that running step (spent is taken off it as the step pays)
