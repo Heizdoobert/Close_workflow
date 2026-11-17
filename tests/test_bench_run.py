@@ -208,3 +208,53 @@ def test_non_str_event_file_does_not_raise(tmp_path):
     events = [{'file': 5, 'step': 1}]
     bench._relative_events(events, tmp_path)
     assert events[0]['file'] == ''
+
+
+def test_tracked_env_example_is_copied_but_env_is_not(bench_dir):
+    (bench_dir / '.env.example').write_text('KEY=\n', encoding='utf-8')
+    (bench_dir / '.env').write_text('SECRET=1', encoding='utf-8')
+    subprocess.run(['git', 'add', '.env.example', '.env', '-f'], cwd=bench_dir, check=True)
+    repo = bench_dir / 'copy'
+    bench._copy_tracked(repo)
+    assert (repo / '.env.example').read_text(encoding='utf-8') == 'KEY=\n'
+    assert not (repo / '.env').exists()
+
+
+def test_run_task_records_turns_and_denied(bench_dir, monkeypatch):
+    def turns_fake(chain, prompt, o, trace=None, sleep=None):
+        o.events.append({'turn': 1, 'tool': 'Read'})
+        o.events.append({'turn': 3, 'tool': 'Bash', 'denied': True})
+        o.events.append({'turn': 2, 'tool': 'Bash', 'denied': True})
+        o.events.append({'turn': 2, 'tool': 'Grep', 'denied': False})
+        trace.append({'backend': 'fake', 'ok': True})
+        return agents.Result(True, 'x', 0.0, {}), 0.0, {}
+
+    monkeypatch.setattr(bench.agents, 'call', turns_fake)
+    res = bench.run_task(bench.BENCH / 't1', 1)
+    assert res['turns'] == 3
+    assert res['denied'] == 2
+
+
+def test_run_task_without_events_has_zero_turns(bench_dir):
+    res = bench.run_task(bench.BENCH / 't1', 1)
+    assert res['turns'] == 0
+    assert res['denied'] == 0
+
+
+def test_max_turn_ignores_non_int_turns():
+    events = [{'turn': True}, {'turn': '4'}, {'turn': 2.0}, {'turn': 1}]
+    assert bench._max_turn(events) == 1
+
+
+def test_results_json_keeps_turns_and_denied(bench_dir, monkeypatch):
+    def turns_fake(chain, prompt, o, trace=None, sleep=None):
+        o.events.append({'turn': 2, 'tool': 'Bash', 'denied': True})
+        trace.append({'backend': 'fake', 'ok': True})
+        return agents.Result(True, 'x', 0.0, {}), 0.0, {}
+
+    monkeypatch.setattr(bench.agents, 'call', turns_fake)
+    bench.cmd_run([])
+    res = json.loads((bench_dir / 'harness' / 'runs' / '1' / 'results.json').read_text(encoding='utf-8'))
+    assert res['tasks']['t1']['turns'] == 2
+    assert res['tasks']['t1']['denied'] == 1
+    assert 'events' not in res['tasks']['t1']
