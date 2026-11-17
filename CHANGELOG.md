@@ -17,11 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `flow-task bench` trace events carry `error` and `denied` from the tool results, so a refused call is no longer mistaken for a real one.
+- `flow-task bench run` records `turns` and `denied` per task; `change` takes `--predict none` and `--risk`; `compare` prints cost and turn totals, splits expected and unexpected regressions and warns when a newer run is incomplete.
+- `flow-task bench analyze` groups failing tasks by turn, labels refused calls and names a saturated bench when no task fails.
+
 - Claims layer (anti-lying) before SHIP: step PASS/FAIL claims rerun at the step commit, `analysis.md` hash checked, one LLM cross-check; an unrun check is NO-GO (`FLOW_CLAIMS`, `FLOW_CLAIMS_USD`).
 - `pyproject.toml` declares the MIT license.
 
 ### Security
 
+- Sandbox: commit and tag signing is off inside bwrap (a copy of the global git config with signing off is bound over it), so sandboxed agents cannot sign as the user and `git commit` no longer fails on the hidden signing key.
 - Bench needs the bwrap sandbox (`FLOW_BENCH_UNSANDBOXED=1` opts out) and runs `accept.sh` with a scrubbed environment.
 - Bench: corrupt results, trace or manifest files and symlinked component paths now give `bench error` instead of a traceback or an outside-repo read.
 - Sub-agents (claude, agy, opencode) no longer inherit environment variables whose names match SECRET_ENV (FLOW_AGENT_ENV_KEEP keeps a name). For claude sub-agents under bwrap, ~/.ssh, ~/.netrc, the opencode auth file and similar secret paths and the engine .env are hidden; agy, opencode and runs without bwrap can still read them.
