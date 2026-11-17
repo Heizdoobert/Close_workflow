@@ -31,6 +31,16 @@ def test_agent_env_drops_secret_names(monkeypatch):
     assert "PATH" in env and "HOME" in env and "GIT_CONFIG_KEY_0" in env and "ANTHROPIC_API_KEY" in env
 
 
+def test_agent_env_keeps_every_claude_login_name(monkeypatch):
+    monkeypatch.delenv("FLOW_AGENT_ENV_KEEP", raising=False)
+    for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"):
+        monkeypatch.setenv(name, "x")
+
+    env = secrets.agent_env()
+
+    assert "ANTHROPIC_API_KEY" in env and "ANTHROPIC_AUTH_TOKEN" in env and "CLAUDE_CODE_OAUTH_TOKEN" in env
+
+
 def test_agent_env_keeps_names_from_flow_agent_env_keep(monkeypatch):
     monkeypatch.setenv("FLOW_AGENT_ENV_KEEP", ' FAKE_SERVICE_TOKEN , ,')
     monkeypatch.setenv("FAKE_SERVICE_TOKEN", "x")
@@ -64,6 +74,27 @@ def test_claude_subprocess_gets_filtered_env(tmp_path, monkeypatch, env_log):
     assert res.ok
     names = {line.split("=", 1)[0] for line in (tmp_path / "env.txt").read_text().splitlines() if "=" in line}
     assert "REDIS_PASSWORD" not in names and "PATH" in names
+
+
+def test_opencode_subprocess_gets_filtered_env_and_no_sandbox(tmp_path, monkeypatch, env_log):
+    bindir = tmp_path / "dir with space"
+    bindir.mkdir(parents=True)
+    fake = bindir / "fake_opencode.sh"
+    fake.write_text(
+        "#!/bin/sh\n"
+        + "env > " + shlex.quote(str(tmp_path / "env.txt")) + "\n"
+        + "printf '%s\\n' '{\"type\": \"text\", \"text\": \"ok\"}'\n"
+    )
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("FLOW_OPENCODE", str(fake))
+    monkeypatch.setenv("REDIS_PASSWORD", "x")
+    wt = tmp_path / "wt"
+    wt.mkdir()
+
+    agents.run_opencode(None, "hi", agents.Opts(str(wt), agents.READ_TOOLS))
+
+    names = {line.split("=", 1)[0] for line in (tmp_path / "env.txt").read_text().splitlines() if "=" in line}
+    assert "REDIS_PASSWORD" not in names and "NO_SANDBOX" in names and "PATH" in names
 
 
 def test_acceptance_still_hides_fake_service_token(tmp_path, monkeypatch):

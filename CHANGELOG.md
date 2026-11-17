@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Bench needs the bwrap sandbox (`FLOW_BENCH_UNSANDBOXED=1` opts out) and runs `accept.sh` with a scrubbed environment.
 - Bench: corrupt results, trace or manifest files and symlinked component paths now give `bench error` instead of a traceback or an outside-repo read.
-- Sub-agents (claude, agy, opencode) no longer inherit environment variables whose names match SECRET_ENV; bwrap hides ~/.ssh, ~/.aws, ~/.netrc and similar secret paths and the engine .env (FLOW_AGENT_ENV_KEEP keeps a name).
+- Sub-agents (claude, agy, opencode) no longer inherit environment variables whose names match SECRET_ENV (FLOW_AGENT_ENV_KEEP keeps a name). For claude sub-agents under bwrap, ~/.ssh, ~/.netrc, the opencode auth file and similar secret paths and the engine .env are hidden; agy, opencode and runs without bwrap can still read them.
 
 ### Removed
 

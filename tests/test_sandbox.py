@@ -163,6 +163,41 @@ def test_wrap_skips_secret_paths_that_do_not_exist(tmp_path, monkeypatch):
     assert "--tmpfs" not in cmd and "/dev/null" not in cmd
 
 
+@pytest.mark.parametrize("rel", sandbox.SECRET_DIRS + sandbox.SECRET_FILES)
+def test_wrap_hides_each_listed_secret_path(rel, tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    path = home / rel
+    if rel in sandbox.SECRET_DIRS:
+        path.mkdir(parents=True)
+        want = ["--tmpfs", str(path)]
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("secret")
+        want = ["--ro-bind", "/dev/null", str(path)]
+    root = tmp_path / "root"
+    root.mkdir()
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(engine, "ROOT", root)
+
+    cmd = sandbox.wrap(["x"], str(wt))
+
+    assert any(cmd[i:i + len(want)] == want for i in range(len(cmd)))
+
+
+def test_wrap_does_not_hide_secret_paths_inside_the_worktree(tmp_path, monkeypatch):
+    wt = tmp_path / "wt"
+    (wt / ".ssh").mkdir(parents=True)
+    (wt / ".env").write_text("TOKEN=abc")
+    monkeypatch.setenv("HOME", str(wt))
+    monkeypatch.setattr(engine, "ROOT", wt)
+
+    cmd = sandbox.wrap(["x"], str(wt))
+
+    assert str(wt / ".ssh") not in cmd and str(wt / ".env") not in cmd
+
+
 def test_real_bwrap_hides_engine_env_file(monkeypatch):
     if sandbox.available() != "bwrap":
         # no working bwrap here: the no-sandbox path above covers this host
@@ -176,9 +211,11 @@ def test_real_bwrap_hides_engine_env_file(monkeypatch):
         (root / ".env").write_text("VISIBLE_MARK=1")
         monkeypatch.setattr(engine, "ROOT", root)
 
-        p = subprocess.run(sandbox.wrap(["cat", str(root / ".env")], str(wt)), cwd=str(wt), capture_output=True, text=True)
+        # bwrap mounts binds nodev, so /dev/null over the file reads as "Permission denied" (another bwrap may read it as empty)
+        p = subprocess.run(sandbox.wrap(["sh", "-c", 'echo started; cat "$1"', "sh", str(root / ".env")], str(wt)), cwd=str(wt), capture_output=True, text=True)
 
-        assert p.stdout == ""
+        assert "started" in p.stdout, p.stderr  # the sandbox really ran: a bwrap that failed to start prints nothing either
+        assert "VISIBLE_MARK" not in p.stdout
         assert "VISIBLE_MARK" in (root / ".env").read_text()
     finally:
         shutil.rmtree(root, ignore_errors=True)

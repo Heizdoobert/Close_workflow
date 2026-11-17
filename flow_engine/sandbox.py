@@ -6,7 +6,9 @@ Sub-agents get no environment variable whose name matches secrets.SECRET_ENV (se
 secret directories and files listed in SECRET_DIRS and SECRET_FILES below, and the engine .env. Still visible: claude's own
 credentials under ~/.claude and ~/.claude.json, and the network.
 Without bwrap nothing stops a write; plan.py's escaping_paths post-check after each step is the only guard.
-agy is not wrapped: its own sandbox already mounts only /mnt/second_drive and /tmp.
+agy is not wrapped: its own sandbox already mounts only /mnt/second_drive and /tmp. opencode is not wrapped either.
+So the secret paths are hidden from claude only: agy, opencode and any run without bwrap can still read them,
+and a secret path inside the bound worktree is not hidden.
 """
 
 import functools
@@ -39,7 +41,8 @@ SECRET_FILES = ['.netrc', '.git-credentials', '.pypirc', '.npmrc', '.docker/conf
 
 
 def _hidden(wd):
-    """bwrap flags that hide the secret dirs and files that exist (an empty tmpfs or /dev/null over them); never the worktree."""
+    """bwrap flags that hide the secret dirs and files that exist (an empty tmpfs or /dev/null over them); never the worktree.
+    bwrap binds are nodev, so a hidden file is not empty but unreadable: opening it fails with "Permission denied"."""
     from flow_engine import engine  # lazy: engine imports agents, which imports this module
     home = Path.home()
     wd_path = Path(wd).resolve()
