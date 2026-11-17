@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import stat
 import subprocess
@@ -219,3 +220,85 @@ def test_real_bwrap_hides_engine_env_file(monkeypatch):
         assert "VISIBLE_MARK" in (root / ".env").read_text()
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_no_signing_binds_copy_with_signing_off_over_global_gitconfig(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    original = "[commit]\n\tgpgsign = true\n"
+    (home / ".gitconfig").write_text(original)
+    root = tmp_path / "root"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(engine, "ROOT", root)
+    wt = tmp_path / "wt"
+    wt.mkdir()
+
+    flags = sandbox._no_signing(str(wt))
+
+    assert flags[0] == "--ro-bind" and flags[2] == str(home / ".gitconfig")
+    assert Path(flags[1]).parent == root / "logs" and Path(flags[1]).name.startswith("sandbox-gitconfig-")
+    copy = Path(flags[1])
+    text = copy.read_text()
+    assert text.startswith(original)
+    assert text.endswith("\n[commit]\n\tgpgsign = false\n[tag]\n\tgpgsign = false\n")
+    assert stat.S_IMODE(copy.stat().st_mode) == 0o600
+
+
+def test_no_signing_binds_xdg_config_when_only_that_exists(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    xdg = home / ".config" / "git" / "config"
+    xdg.parent.mkdir(parents=True)
+    xdg.write_text("[user]\n\tname = x\n")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(engine, "ROOT", tmp_path / "root")
+    wt = tmp_path / "wt"
+    wt.mkdir()
+
+    flags = sandbox._no_signing(str(wt))
+
+    assert flags[0] == "--ro-bind" and flags[2] == str(xdg)
+
+
+def test_no_signing_returns_nothing_without_a_git_config(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "empty-home"))
+    monkeypatch.setattr(engine, "ROOT", tmp_path / "root")
+    wt = tmp_path / "wt"
+    wt.mkdir()
+
+    assert sandbox._no_signing(str(wt)) == []
+
+
+def test_real_bwrap_signed_commit_works_only_with_signing_off(tmp_path, monkeypatch):
+    if sandbox.available() != "bwrap":
+        # no working bwrap here: the no-sandbox path above covers this host
+        assert sandbox.available() is None
+        return
+    home = tmp_path / "home"
+    (home / ".ssh").mkdir(parents=True)
+    key = home / ".ssh" / "key.pub"
+    key.write_text("ssh-ed25519 AAAA test")
+    (home / ".gitconfig").write_text(
+        "[user]\n\tname = Test\n\temail = test@example.com\n"
+        "[commit]\n\tgpgsign = true\n[gpg]\n\tformat = ssh\n"
+        f"[user]\n\tsigningkey = {key}\n"
+    )
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(engine, "ROOT", tmp_path / "root")
+    env = {"PATH": os.environ["PATH"], "HOME": str(home)}
+
+    def fresh_repo(name):
+        repo = tmp_path / name
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        (repo / "a.txt").write_text("a")
+        subprocess.run(["git", "-C", str(repo), "add", "a.txt"], check=True)
+        return repo
+
+    repo = fresh_repo("signed")
+    ok = subprocess.run(sandbox.wrap(["git", "-C", str(repo), "commit", "-qm", "x"], str(repo)), env=env, capture_output=True, text=True)
+    assert ok.returncode == 0, ok.stderr
+
+    monkeypatch.setattr(sandbox, "_no_signing", lambda wd: [])
+    repo2 = fresh_repo("unsigned")
+    bad = subprocess.run(sandbox.wrap(["git", "-C", str(repo2), "commit", "-qm", "x"], str(repo2)), env=env, capture_output=True, text=True)
+    assert bad.returncode != 0
