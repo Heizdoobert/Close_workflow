@@ -19,6 +19,8 @@ SHAPE_RULES = {"private-key", "sk-key", "aws-key", "github-token"}
 # file names that look like secrets; .env.example and friends are templates, not secrets
 SECRET_FILE_GLOBS = [".env", ".env.*", "*.pem", "*.key", "id_rsa", "id_ed25519", "credentials.json"]
 SECRET_FILE_SAFE = [".env.example", ".env.sample", ".env.template"]
+SECRET_ENV = re.compile(r"(?i)^(?!GIT_CONFIG_KEY_\d+$).*(KEY|TOKEN|SECRET|PASSW|CREDENTIAL|AUTH)")  # GIT_CONFIG_KEY_n is a config name: dropping it leaves GIT_CONFIG_COUNT pointing at nothing and every git call fails
+KEEP_AUTH = ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN')
 
 
 def redact(text):
@@ -58,3 +60,12 @@ def secret_file_name(path):
     if base in SECRET_FILE_SAFE:
         return False
     return any(fnmatch.fnmatchcase(base, g) for g in SECRET_FILE_GLOBS)
+
+
+def agent_env(extra=None):
+    """Environment for a sub-agent: no name that matches SECRET_ENV, except KEEP_AUTH and FLOW_AGENT_ENV_KEEP."""
+    keep = set(KEEP_AUTH) | {n.strip() for n in os.environ.get('FLOW_AGENT_ENV_KEEP', '').split(',') if n.strip()}
+    env = {k: v for k, v in os.environ.items() if k in keep or not SECRET_ENV.search(k)}
+    if extra:
+        env.update(extra)
+    return env

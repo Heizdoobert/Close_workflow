@@ -131,3 +131,54 @@ def test_real_bwrap_allows_worktree_write_and_blocks_parent_write(tmp_path):
         assert ok.returncode == 0 and Path(f"{inside}.2").exists()
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_wrap_hides_secret_dir_and_engine_env_file(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    (home / ".ssh").mkdir(parents=True)
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / ".env").write_text("TOKEN=abc")
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(engine, "ROOT", root)
+
+    cmd = sandbox.wrap(["x"], str(wt))
+
+    assert any(cmd[i:i + 2] == ["--tmpfs", str(home / ".ssh")] for i in range(len(cmd) - 1))
+    assert any(cmd[i:i + 3] == ["--ro-bind", "/dev/null", str(root / ".env")] for i in range(len(cmd) - 2))
+
+
+def test_wrap_skips_secret_paths_that_do_not_exist(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "empty-home"))
+    root = tmp_path / "empty-root"
+    root.mkdir()
+    monkeypatch.setattr(engine, "ROOT", root)
+    wt = tmp_path / "wt"
+    wt.mkdir()
+
+    cmd = sandbox.wrap(["x"], str(wt))
+
+    assert "--tmpfs" not in cmd and "/dev/null" not in cmd
+
+
+def test_real_bwrap_hides_engine_env_file(monkeypatch):
+    if sandbox.available() != "bwrap":
+        # no working bwrap here: the no-sandbox path above covers this host
+        assert sandbox.available() is None
+        return
+    # /tmp is writable inside the sandbox by design, so the probe tree lives in /var/tmp
+    root = Path(tempfile.mkdtemp(prefix="flow-sandbox-", dir="/var/tmp"))
+    try:
+        wt = root / "plans" / "p1" / "wt" / "s1"
+        wt.mkdir(parents=True)
+        (root / ".env").write_text("VISIBLE_MARK=1")
+        monkeypatch.setattr(engine, "ROOT", root)
+
+        p = subprocess.run(sandbox.wrap(["cat", str(root / ".env")], str(wt)), cwd=str(wt), capture_output=True, text=True)
+
+        assert p.stdout == ""
+        assert "VISIBLE_MARK" in (root / ".env").read_text()
+    finally:
+        shutil.rmtree(root, ignore_errors=True)

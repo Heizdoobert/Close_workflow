@@ -239,6 +239,8 @@ def kill_group(p):
 
 def _run(cmd, o, stdin=None, env=None):
     with _slot():  # only the subprocess itself holds a slot: backoff sleeps happen outside
+        if env is None:
+            env = secrets.agent_env()
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
                              cwd=o.workdir, env=env, preexec_fn=_die_with_runner if sys.platform.startswith("linux") else None, **new_group())
         if o.on_group:
@@ -378,7 +380,7 @@ def run_opencode(model, prompt, o):
         return _fail("opencode CLI not found", "opencode", False)
     cmd = [exe, "run", prompt, "--format", "json", "--dir", o.workdir] + (["-m", model] if model else [])
     try:
-        p = _run(cmd, o, env={**os.environ, "NO_SANDBOX": "1"})  # NO_SANDBOX: host binary, not the Docker wrapper
+        p = _run(cmd, o, env=secrets.agent_env({"NO_SANDBOX": "1"}))  # NO_SANDBOX: host binary, not the Docker wrapper
     except subprocess.TimeoutExpired:
         return _fail(f"timeout after {o.timeout}s", "opencode", True)
     except OSError as e:

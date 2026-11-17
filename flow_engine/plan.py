@@ -25,14 +25,13 @@ from pathlib import Path
 
 from flow_engine import agents, audit, bridge, claims, claims_llm, engine, gate, interview, journal, method
 # SECRET_PATTERNS and redact live in secrets.py; they stay importable from here
-from flow_engine.secrets import SECRET_PATTERNS, redact, redact_obj, redact_shapes
+from flow_engine.secrets import SECRET_ENV, SECRET_PATTERNS, redact, redact_obj, redact_shapes
 
 ID = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 IDENT = ["-c", "user.name=flow-engine", "-c", "user.email=flow@localhost"]
 JUNK = [":(glob)**/__pycache__/**", ":(glob)**/*.pyc", ":(glob).pytest_cache/**"]  # build junk a repo without a .gitignore would otherwise commit
 WIN_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
 WIN_BAD_CHARS = re.compile(r'[<>:"|?*]')
-SECRET_ENV = re.compile(r"(?i)^(?!GIT_CONFIG_KEY_\d+$).*(KEY|TOKEN|SECRET|PASSW|CREDENTIAL|AUTH)")  # GIT_CONFIG_KEY_n is a config name: dropping it leaves GIT_CONFIG_COUNT pointing at nothing and every git call fails
 ACCEPT_TAIL_BYTES = 64 * 1024  # per stream; only the last part is kept for the report and the retry prompt
 class PlanError(Exception):
     pass
