@@ -18,6 +18,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 
@@ -79,14 +80,16 @@ def _no_signing(wd):
     try:
         if _inside(src, Path(wd).resolve()):
             return []
-        text = src.read_text() + "\n[commit]\n\tgpgsign = false\n[tag]\n\tgpgsign = false\n"
-        # the name carries a hash of the text, so a fake HOME in a test never overwrites the copy a live agent binds
-        copy = Path(engine.ROOT) / "logs" / ("sandbox-gitconfig-" + hashlib.sha256(text.encode()).hexdigest()[:12])
-        copy.parent.mkdir(parents=True, exist_ok=True)
-        tmp = copy.parent / (".tmp-" + str(os.getpid()))
-        tmp.write_text(text)
-        tmp.chmod(0o600)
-        os.replace(tmp, copy)
+        data = src.read_bytes() + b"\n[commit]\n\tgpgsign = false\n[tag]\n\tgpgsign = false\n"  # bytes: a config that is not UTF-8 must not stop every agent
+        # the name carries a hash of the content: a fake HOME in a test never overwrites the copy a live agent binds,
+        # and a copy that exists is complete (written whole, then renamed), so it is not written again
+        copy = Path(engine.ROOT) / "logs" / ("sandbox-gitconfig-" + hashlib.sha256(data).hexdigest()[:12])
+        if not copy.is_file():
+            copy.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=copy.parent, prefix=".tmp-")  # mode 0600, unique per call: parallel plan steps are threads of one process
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            os.replace(tmp, copy)
     except OSError:
         return []
     return ["--ro-bind", str(copy), str(src)]

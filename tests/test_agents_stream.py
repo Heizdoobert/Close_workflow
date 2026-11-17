@@ -217,3 +217,12 @@ def test_permission_denials_non_dict_items_are_ignored(fake_claude):
     agents.run_claude("haiku", "p", o)
     assert "denied" not in o.events[0]
     assert o.events[0]["error"] == "This command requires approval"
+
+
+def test_tool_result_and_denial_with_unknown_ids_are_ignored(fake_claude):
+    read = _tool_use("t8", "Read", {"file_path": "a.py"})
+    denial = {"tool_name": "Bash", "tool_use_id": "never-announced", "tool_input": {}}
+    o = fake_claude([read, _tool_result("never-announced", "This command requires approval"), _result_denying(denial)])
+    res = agents.run_claude("haiku", "p", o)
+    assert res.ok
+    assert o.events == [{"step": 0, "turn": 1, "tool": "Read", "file": "a.py"}]

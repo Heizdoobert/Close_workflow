@@ -302,3 +302,59 @@ def test_real_bwrap_signed_commit_works_only_with_signing_off(tmp_path, monkeypa
     repo2 = fresh_repo("unsigned")
     bad = subprocess.run(sandbox.wrap(["git", "-C", str(repo2), "commit", "-qm", "x"], str(repo2)), env=env, capture_output=True, text=True)
     assert bad.returncode != 0
+
+
+def _signing_home(tmp_path, monkeypatch, data=b"[commit]\n\tgpgsign = true\n"):
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".gitconfig").write_bytes(data)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(engine, "ROOT", tmp_path / "root")
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    return home, wt
+
+
+def test_no_signing_copies_a_config_that_is_not_utf8_byte_for_byte(tmp_path, monkeypatch):
+    data = b"[user]\n\tname = J\xf6rg\n[commit]\n\tgpgsign = true\n"  # Latin-1, not valid UTF-8
+    home, wt = _signing_home(tmp_path, monkeypatch, data)
+    flags = sandbox._no_signing(str(wt))
+    assert flags[0] == "--ro-bind" and flags[2] == str(home / ".gitconfig")
+    assert Path(flags[1]).read_bytes() == data + b"\n[commit]\n\tgpgsign = false\n[tag]\n\tgpgsign = false\n"
+
+
+def test_wrap_binds_the_no_signing_copy_over_the_global_config(tmp_path, monkeypatch):
+    home, wt = _signing_home(tmp_path, monkeypatch)
+    cmd = sandbox.wrap(["true"], str(wt))
+    i = cmd.index(str(home / ".gitconfig"))
+    assert cmd[i - 2] == "--ro-bind" and Path(cmd[i - 1]).name.startswith("sandbox-gitconfig-")
+    assert cmd.index("--die-with-parent") > i
+
+
+def test_no_signing_skips_a_config_inside_the_worktree(tmp_path, monkeypatch):
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    (wt / ".gitconfig").write_text("[commit]\n\tgpgsign = true\n")
+    monkeypatch.setenv("HOME", str(wt))
+    monkeypatch.setattr(engine, "ROOT", tmp_path / "root")
+    assert sandbox._no_signing(str(wt)) == []
+
+
+def test_no_signing_returns_nothing_when_the_copy_cannot_be_written(tmp_path, monkeypatch):
+    home, wt = _signing_home(tmp_path, monkeypatch)
+    root = tmp_path / "root-is-a-file"
+    root.write_text("x")
+    monkeypatch.setattr(engine, "ROOT", root)
+    assert sandbox._no_signing(str(wt)) == []
+
+
+def test_no_signing_from_parallel_threads_gives_one_complete_copy(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    home, wt = _signing_home(tmp_path, monkeypatch)
+    with ThreadPoolExecutor(8) as pool:
+        results = list(pool.map(lambda _: sandbox._no_signing(str(wt)), range(16)))
+    assert all(r == results[0] for r in results) and results[0][0] == "--ro-bind"
+    copy = Path(results[0][1])
+    assert copy.read_bytes().endswith(b"[tag]\n\tgpgsign = false\n")
+    assert stat.S_IMODE(copy.stat().st_mode) == 0o600
+    assert [p.name for p in copy.parent.iterdir()] == [copy.name]  # no temp file left behind
