@@ -2,6 +2,8 @@
 # Order: a real env var wins, then .env, then this file. An empty value means "not set".
 # A backend spec is "claude:<model>", "agy:<model-id>", "opencode[:provider/model]" or "api:<provider>/<model>".
 # Suffix "!" pins a model (never falls back), "+" retries it longer before falling back.
+# opencode is not in use on this machine: its API key has expired (401, checked 2026-11-17). Keep it out of
+# every chain until a new key is set; it also runs without the bwrap sandbox and without a hard budget.
 
 [models]
 # Single tasks (flow-task enqueue / exec): a claude model name.            -> FLOW_MODEL
