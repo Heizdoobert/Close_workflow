@@ -3,6 +3,7 @@
 Reward is the exit code of each task's accept.sh (0 = pass). Output goes to harness/runs/<N>/.
 '''
 import json
+import math
 import os
 import re
 import shutil
@@ -11,7 +12,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from flow_engine import agents, sandbox
+from flow_engine import agents, sandbox, secrets
 
 BENCH = Path('harness') / 'bench'
 RUNS = Path('harness') / 'runs'
@@ -37,7 +38,7 @@ NEXT_ON_ERROR = {
     'run': 'NEXT: flow-task bench run',
     'compare': 'NEXT: flow-task bench compare',
     'analyze': 'NEXT: flow-task bench analyze',
-    'change': 'NEXT: flow-task bench change --file <F> --evidence <E> --root <R> --fix <X> --predict <T>',
+    'change': 'NEXT: flow-task bench change --file <F> --evidence <E> --root <R> --fix <X> --predict <T|none> [--risk <T>]',
 }
 
 
@@ -125,7 +126,17 @@ def run_task(task_dir, n):
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return {'reward': 1 if rc == 0 else 0, 'accept_exit': rc, 'cost_usd': round(cost, 6), 'tokens': tok, 'ok': res.ok,
-            'error': (res.error or '')[:200], 'backend': res.backend, 'out': out[-2000:], 'trace': trace, 'events': events}
+            'error': (res.error or '')[:200], 'backend': res.backend, 'out': out[-2000:], 'trace': trace, 'events': events,
+            'turns': _max_turn(events), 'denied': sum(1 for ev in events if ev.get('denied') is True)}
+
+
+def _max_turn(events):
+    turns = [ev['turn'] for ev in events if _is_int(ev.get('turn'))]
+    return max(turns, default=0)
+
+
+def _is_int(value):
+    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def cmd_run(rest):
@@ -152,12 +163,12 @@ def cmd_run(rest):
     return 0
 
 
-CHANGE_USAGE = 'usage: flow-task bench change --file F [--file G] --evidence E --root R --fix X --predict T1,T2'
-CHANGE_FLAGS = ('--file', '--evidence', '--root', '--fix', '--predict')
+CHANGE_USAGE = 'usage: flow-task bench change --file F [--file G] --evidence E --root R --fix X --predict T1,T2|none [--risk T1,T2]'
+CHANGE_FLAGS = ('--file', '--evidence', '--root', '--fix', '--predict', '--risk')
 
 
 def _change_args(rest):
-    opts = {'--file': [], '--evidence': '', '--root': '', '--fix': '', '--predict': ''}
+    opts = {'--file': [], '--evidence': '', '--root': '', '--fix': '', '--predict': '', '--risk': ''}
     i = 0
     while i < len(rest):
         flag = rest[i]
@@ -190,6 +201,8 @@ _SECRET_SUFFIXES = ('.pem', '.key', '.p12', '.pfx')
 
 
 def _secret_name(name):
+    if name in secrets.SECRET_FILE_SAFE:
+        return False
     return name.startswith('.env') or name in _SECRET_NAMES or name.lower().endswith(_SECRET_SUFFIXES)
 
 
@@ -240,11 +253,13 @@ def cmd_change(rest):
     if not 1 <= len(opts['--file']) <= 2:
         raise BenchError('change may touch 1 or 2 files')
     files = [_check_file(f) for f in opts['--file']]
-    predict = [p.strip() for p in fields['--predict'].split(',') if p.strip()]
-    if not predict:
+    raw_predict = fields['--predict']
+    predict = [] if raw_predict == 'none' else [p.strip() for p in raw_predict.split(',') if p.strip()]
+    if not predict and raw_predict != 'none':
         raise BenchError('missing --predict')
+    risk = [r.strip() for r in opts['--risk'].split(',') if r.strip()]
     known = {d.name for d in tasks()}
-    for name in predict:
+    for name in predict + risk:
         if name not in known:
             raise BenchError(f'unknown task: {name}')
     n = next_run()
@@ -252,12 +267,12 @@ def cmd_change(rest):
         raise BenchError(f'manifest for run {n} already exists: one change per run, run the bench first')
     snapshot = {path: Path(path).read_text(encoding='utf-8') for path in files}
     manifest = {'run': n, 'files': files, 'evidence': fields['--evidence'], 'root': fields['--root'],
-                'fix': fields['--fix'], 'predict': predict, 'snapshot': snapshot}
+                'fix': fields['--fix'], 'predict': predict, 'risk': risk, 'snapshot': snapshot}
     MANIFEST.mkdir(parents=True, exist_ok=True)
     out = MANIFEST / f'{n}.json'
     out.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding='utf-8')
     print(f'manifest written: {out}')
-    print('NEXT: flow-task bench run')
+    print('NEXT: edit the files, then: flow-task bench run')
     return 0
 
 
@@ -293,17 +308,47 @@ def _check_manifest(manifest, n):
     snapshot = manifest.get('snapshot')
     if not isinstance(snapshot, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in snapshot.items()):
         raise bad
+    risk = manifest.get('risk', [])
+    if not isinstance(risk, list) or not all(isinstance(r, str) for r in risk):
+        raise bad
+
+
+def _total(tasks, key):
+    total = 0.0
+    for name, item in tasks.items():
+        value = item.get(key, 0)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise BenchError(f'bad results file: {key} of {name} is not a number')
+        total += value
+    return total
+
+
+def _turn_total(tasks):
+    """Sum of the per-task turns, or None when any task has no int turns (results from before turns were recorded)."""
+    values = [item.get('turns') for item in tasks.values()]
+    if not all(_is_int(v) for v in values):
+        return None
+    return sum(values)
+
+
+def _warn_incomplete(n):
+    m = max(_numbered_runs(), default=0)
+    if m > n:
+        print(f'warning: run {m} is incomplete, using run {n}')
 
 
 def cmd_compare(rest):
     n = latest_run()
     if n is None:
         raise BenchError('no run yet: flow-task bench run')
+    _warn_incomplete(n)
+    cur_tasks = _load_results(n)['tasks']
     cur = _rewards(n)
     if n - 1 < 1 or not _is_complete(RUNS / str(n - 1) / 'results.json'):
         print('no previous run to compare with (run N is the first)')
         print('NEXT: flow-task bench analyze')
         return 0
+    prev_tasks = _load_results(n - 1)['tasks']
     prev = _rewards(n - 1)
     flips = []
     for name in sorted(set(prev) | set(cur)):
@@ -312,8 +357,15 @@ def cmd_compare(rest):
         if a != b:
             flips.append((name, a, b))
             print(f'{name}: {a}->{b}')
+    cost_a, cost_b = _total(prev_tasks, 'cost_usd'), _total(cur_tasks, 'cost_usd')
+    pct = f' (+{(cost_b - cost_a) / cost_a * 100:.1f}%)' if cost_a else ''
+    print(f'cost {cost_a:.4f} -> {cost_b:.4f} USD{pct}')
+    turns_a, turns_b = _turn_total(prev_tasks), _turn_total(cur_tasks)
+    turns = None if turns_a is None or turns_b is None else [turns_a, turns_b]
+    print('turns n/a' if turns is None else f'turns {turns_a} -> {turns_b}')
     improvements = sum(1 for _, a, b in flips if a == 0 and b == 1)
-    regressions = sum(1 for _, a, b in flips if a == 1 and b == 0)
+    regression_names = [name for name, a, b in flips if a == 1 and b == 0]
+    regressions = len(regression_names)
     manifest_file = MANIFEST / f'{n}.json'
     manifest = None
     if manifest_file.is_file():
@@ -322,6 +374,15 @@ def cmd_compare(rest):
         except (OSError, ValueError):
             raise BenchError(f'bad manifest for run {n}')
         _check_manifest(manifest, n)
+    risk = set(manifest.get('risk', [])) if manifest is not None else set()
+    expected = [name for name in regression_names if name in risk]
+    unexpected = [name for name in regression_names if name not in risk]
+    if manifest is not None and regressions:
+        print(f'regressions: {len(expected)} expected (in --risk), {len(unexpected)} unexpected')
+        if expected:
+            print(f'  expected: {", ".join(expected)}')
+        if unexpected:
+            print(f'  unexpected: {", ".join(unexpected)}')
     predicted_flip = None
     reason = ''
     restore = False
@@ -330,7 +391,7 @@ def cmd_compare(rest):
         predicted_flip = sum(1 for name in predict if prev.get(name, 0) == 0 and cur.get(name, 0) == 1)
         if regressions > improvements:
             reason = f'regressions {regressions} > flips {improvements}'
-        elif predicted_flip == 0:
+        elif predict and predicted_flip == 0:
             reason = f'zero predicted flips (predicted: {", ".join(predict)})'
         restore = bool(reason)
     restored = []
@@ -353,12 +414,15 @@ def cmd_compare(rest):
             Path(path).write_text(text, encoding='utf-8')
             restored.append(path)
     eval_data = {'run': n, 'improvements': improvements, 'regressions': regressions, 'predicted_flip': predicted_flip,
-                 'restored': restored, 'reason': reason}
+                 'restored': restored, 'reason': reason, 'cost': [round(cost_a, 6), round(cost_b, 6)], 'turns': turns,
+                 'regressions_expected': expected, 'regressions_unexpected': unexpected}
     (RUNS / str(n) / 'eval.json').write_text(json.dumps(eval_data, indent=2, ensure_ascii=False), encoding='utf-8')
     if restored:
         print(f'restored {", ".join(restored)} to run {n - 1} state: {reason}')
+    elif manifest is not None:
+        print(f'kept run {n} changes')
     else:
-        print('kept run N changes')
+        print(f'no manifest for run {n}: nothing to keep or restore')
     print('NEXT: flow-task bench analyze')
     return 0
 
@@ -415,7 +479,7 @@ def cmd_analyze(rest):
 def main(rest):
     sub = rest[0] if rest else ''
     if sub not in SUBCOMMANDS:
-        print('usage: flow-task bench run | compare | analyze | change --file F --evidence E --root R --fix X --predict T')
+        print('usage: flow-task bench run | compare | analyze | change --file F --evidence E --root R --fix X --predict T1,T2|none [--risk T1,T2]')
         print('NEXT: flow-task bench run')
         return 1
     fn = {'run': cmd_run, 'compare': cmd_compare, 'analyze': cmd_analyze, 'change': cmd_change}[sub]

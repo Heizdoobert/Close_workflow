@@ -26,7 +26,7 @@ def test_valid_change_writes_manifest_with_snapshot(change_dir, capsys):
     data = json.loads((change_dir / 'harness' / 'manifest' / '1.json').read_text(encoding='utf-8'))
     assert data['snapshot']['flow_engine/agents.py'] == 'ORIGINAL'
     assert data['predict'] == ['t1']
-    assert capsys.readouterr().out.splitlines()[-1] == 'NEXT: flow-task bench run'
+    assert capsys.readouterr().out.splitlines()[-1] == 'NEXT: edit the files, then: flow-task bench run'
 
 
 def test_three_files_rejected(change_dir):
@@ -92,3 +92,38 @@ def test_symlinked_component_dir_is_refused(change_dir, capsys):
     assert 'bench error' in capsys.readouterr().err
     assert not (change_dir / 'harness' / 'manifest' / '1.json').exists()
     assert (outside_dir / 'agents.py').read_text(encoding='utf-8') == 'OUTSIDE'
+
+
+def test_predict_none_stores_empty_list(change_dir, capsys):
+    assert bench.cmd_change(VALID[:-1] + ['none']) == 0
+    data = json.loads((change_dir / 'harness' / 'manifest' / '1.json').read_text(encoding='utf-8'))
+    assert data['predict'] == []
+    assert data['risk'] == []
+
+
+def test_empty_predict_still_rejected(change_dir):
+    with pytest.raises(bench.BenchError, match='missing --predict'):
+        bench.cmd_change(VALID[:-1] + [' , '])
+
+
+def test_risk_is_stored(change_dir):
+    assert bench.cmd_change(VALID + ['--risk', 't1']) == 0
+    data = json.loads((change_dir / 'harness' / 'manifest' / '1.json').read_text(encoding='utf-8'))
+    assert data['risk'] == ['t1']
+
+
+def test_unknown_risk_task_rejected(change_dir):
+    with pytest.raises(bench.BenchError, match='unknown task: nope'):
+        bench.cmd_change(VALID + ['--risk', 'nope'])
+    assert not (change_dir / 'harness' / 'manifest' / '1.json').exists()
+
+
+def test_risk_flag_needs_value(change_dir, capsys):
+    assert bench.main(['change'] + VALID + ['--risk']) == 1
+    assert 'bench error' in capsys.readouterr().err
+
+
+def test_change_usage_mentions_risk_and_none(capsys):
+    assert bench.main(['nope']) == 1
+    assert '--risk' in capsys.readouterr().out
+    assert '|none' in bench.CHANGE_USAGE
