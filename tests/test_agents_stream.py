@@ -139,3 +139,81 @@ def test_read_event_has_no_cmd(fake_claude):
     agents.run_claude("haiku", "p", o)
     assert o.events[0]["tool"] == "Read"
     assert "cmd" not in o.events[0]
+
+
+def _tool_use(tid, name, inp):
+    return json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": tid, "name": name, "input": inp}]}})
+
+
+def _tool_result(tid, content, is_error=True):
+    return json.dumps({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": tid, "is_error": is_error, "content": content}]}})
+
+
+def _result_denying(*denials):
+    return json.dumps({"type": "result", "result": "done", "total_cost_usd": 0, "usage": {}, "permission_denials": list(denials)})
+
+
+def test_approval_refusal_sets_error_and_denied_when_listed(fake_claude):
+    bash = _tool_use("t1", "Bash", {"command": "rm x"})
+    denial = {"tool_name": "Bash", "tool_use_id": "t1", "tool_input": {"command": "rm x"}}
+    o = fake_claude([bash, _tool_result("t1", "This command requires approval"), _result_denying(denial)])
+    agents.run_claude("haiku", "p", o)
+    assert o.events[0]["error"] == "This command requires approval"
+    assert o.events[0]["denied"] is True
+
+
+def test_approval_refusal_not_listed_has_error_but_not_denied(fake_claude):
+    bash = _tool_use("t1", "Bash", {"command": "rm x"})
+    o = fake_claude([bash, _tool_result("t1", "This command requires approval"), RESULT])
+    agents.run_claude("haiku", "p", o)
+    assert o.events[0]["error"] == "This command requires approval"
+    assert "denied" not in o.events[0]
+
+
+def test_missing_tool_is_denied_without_permission_denials(fake_claude):
+    write = _tool_use("t2", "Write", {"file_path": "a.py"})
+    text = "<tool_use_error>Error: No such tool available: Write. Try again.</tool_use_error>"
+    o = fake_claude([write, _tool_result("t2", text), RESULT])
+    agents.run_claude("haiku", "p", o)
+    assert o.events[0]["denied"] is True
+    assert o.events[0]["error"].startswith("<tool_use_error>Error: No such tool available: Write.")
+
+
+def test_is_error_false_adds_no_keys(fake_claude):
+    read = _tool_use("t3", "Read", {"file_path": "a.py"})
+    o = fake_claude([read, _tool_result("t3", "file body", is_error=False), RESULT])
+    agents.run_claude("haiku", "p", o)
+    assert o.events == [{"step": 0, "turn": 1, "tool": "Read", "file": "a.py"}]
+
+
+def test_list_content_text_blocks_are_joined(fake_claude):
+    bash = _tool_use("t4", "Bash", {"command": "ls"})
+    content = [{"type": "text", "text": "line one"}, {"type": "image", "source": {}}, {"type": "text", "text": "two"}]
+    o = fake_claude([bash, _tool_result("t4", content), RESULT])
+    agents.run_claude("haiku", "p", o)
+    assert o.events[0]["error"] == "line one two"
+
+
+def test_secret_in_error_text_is_redacted(fake_claude):
+    secret = "sk-" + "a1b2c3d4e5f6" * 3
+    bash = _tool_use("t5", "Bash", {"command": "curl h"})
+    o = fake_claude([bash, _tool_result("t5", "auth failed for " + secret + " in this call"), RESULT])
+    agents.run_claude("haiku", "p", o)
+    assert secret not in o.events[0]["error"]
+    assert secret[:8] not in o.events[0]["error"]
+
+
+def test_permission_denials_not_a_list_is_ignored(fake_claude):
+    bash = _tool_use("t6", "Bash", {"command": "rm x"})
+    result = json.dumps({"type": "result", "result": "done", "permission_denials": "t6"})
+    o = fake_claude([bash, _tool_result("t6", "This command requires approval"), result])
+    agents.run_claude("haiku", "p", o)
+    assert "denied" not in o.events[0]
+
+
+def test_permission_denials_non_dict_items_are_ignored(fake_claude):
+    bash = _tool_use("t7", "Bash", {"command": "rm x"})
+    o = fake_claude([bash, _tool_result("t7", "This command requires approval"), _result_denying("t7", None, {"tool_use_id": 5}, {"tool_use_id": ["t7"]})])
+    agents.run_claude("haiku", "p", o)
+    assert "denied" not in o.events[0]
+    assert o.events[0]["error"] == "This command requires approval"
