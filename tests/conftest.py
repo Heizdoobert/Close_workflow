@@ -69,6 +69,17 @@ def isolated_flow_log(monkeypatch, tmp_path_factory):
     return logs
 
 
+@pytest.fixture(autouse=True)
+def isolated_agent_slots(monkeypatch, tmp_path_factory):
+    """A plan runner's knobs and the machine-wide agent slots never reach a test: the tests gate runs this suite inside a runner,
+    and its FLOW_PARALLEL=1 made the plans built by the tests run their steps one at a time."""
+    for k in ("FLOW_PARALLEL", "FLOW_MAX_AGENTS"):
+        monkeypatch.delenv(k, raising=False)
+    slots = tmp_path_factory.mktemp("agent_slots")
+    monkeypatch.setenv("FLOW_SLOT_DIR", str(slots))
+    return slots
+
+
 @pytest.fixture
 def fake_redis(monkeypatch, tmp_path):
     srv = socketserver.ThreadingTCPServer(("127.0.0.1", 0), _Handler)
