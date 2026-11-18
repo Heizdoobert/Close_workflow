@@ -196,7 +196,7 @@ Event `Bash` có thêm `cmd` đã che secret (`secrets.redact` rồi cắt 120 k
 ### Thêm task bench
 Tạo `harness/bench/<tên>/task.md` (gửi nguyên văn làm prompt) và `harness/bench/<tên>/accept.sh` (thoát 0 là qua). Cần cả hai. Tên thư mục là id task trong kết quả và `--predict`. `harness/` không được copy vào repo của agent.
 
-Chạy test: `python3 -m pytest -q tests/test_bench_*.py tests/test_agents_stream.py` (Python 3.11). Full suite: 705 test, khoảng 4 phút.
+Chạy test: `python3 -m pytest -q tests/test_bench_*.py tests/test_agents_stream.py` (Python 3.11). Full suite: 705 test, full suite takes 4-9 min on this machine.
 
 ## 10. AHE gốc và bench của FLOW
 
@@ -205,7 +205,7 @@ Bài báo ([arXiv 2604.25850](https://arxiv.org/html/2604.25850v2)): một agent
 | Mục | AHE gốc | Bench FLOW |
 |---|---|---|
 | 7 thành phần | `systemprompt.md`, `tool_descriptions/`, `tools/`, `middleware/`, `skills/`, `sub_agents/`, `LongTermMEMORY.md` | 7 **class file** của FLOW: prompts, planning, gates, backends, engine, state_io, cli (bench.py:20-28). Không trùng |
-| Manifest | `id`, `type`, `description`, `files`, `failure_pattern`, `predicted_fixes`, `risk_tasks`, `constraint_level`, `why_this_component` | `evidence`, `root`, `fix`, `predict`, `risk` (giống `risk_tasks`, từ pha 3), `files`, `snapshot` |
+| Manifest | `id`, `type`, `description`, `files`, `failure_pattern`, `predicted_fixes`, `risk`, `constraint_level`, `why_this_component` | `evidence`, `root`, `fix`, `predict`, `risk` (từ pha 3), `files`, `snapshot` |
 | Bốn mục bắt buộc | failure evidence, root cause, targeted fix, predicted impact | khớp bốn trường trên |
 | Giới hạn số file | bài **không nêu** giới hạn | tối đa 2 (luật của FLOW) |
 | Phán quyết | KEEP, IMPROVE, ROLLBACK+PIVOT; rollback nếu cùng lớp lỗi dai dẳng 2+ vòng ở một tầng | chỉ rollback khi regression > flip hoặc không có flip dự đoán |
@@ -252,6 +252,6 @@ Tương ứng tầng của FLOW với AHE:
 Việc đáng làm trước, theo thứ tự (cập nhật sau pha 3):
 1. ~~Thêm task bench có thể fail, chạy hai run~~ Đã làm ở pha 2, nhưng haiku vẫn pass hết: cần 2-3 task khó hơn, chạy thật để chắc chúng fail ở baseline.
 2. ~~Lọc env của agent~~ Đã làm ở pha 1.
-3. Thêm `risk_tasks` vào manifest (dự đoán regression), đây là phần AHE dùng để chấm.
+3. Thêm `risk` vào manifest (dự đoán regression), đây là phần AHE dùng để chấm.
 4. Quyết định về `step` và thư mục `harness/runs` (commit baseline hay giữ local).
 5. Sửa tài liệu lỗi thời ở mục 13.
