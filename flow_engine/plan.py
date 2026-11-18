@@ -525,6 +525,7 @@ class Ctx:
         self.slock, self.glock, self.mlock = threading.Lock(), threading.Lock(), threading.Lock()
         self.chain = agents.chain_from_env(None, state.get("parent_model"), "general")  # planner-side work: non-code steps, review, SHIP
         self.code_chain = agents.chain_from_env(None, state.get("parent_model"), "code")
+        self.explorer_chain = agents.chain_from_env(None, state.get("parent_model"), "explorer")  # scout: the hands read the repo for the head
         self.budget = float(os.environ.get("FLOW_PLAN_MAX_USD", "3.0"))
         self.step_usd = float(os.environ.get("FLOW_STEP_USD", "0.40"))  # per-step estimate: what a launch reserves from the budget
         self.reserved = {}  # sid -> USD still reserved for that running step (spent is taken off it as the step pays)
@@ -990,7 +991,7 @@ def scout_pass(ctx):
     """The hands for the head: when code steps run on a cheaper model than the deciding one (Gemini parent: GPT-OSS), that model reads the merged result once
     and gathers quoted facts; review and the SHIP personas decide on those instead of each re-reading the repository. Every quote is checked against the file in
     code (method.parse_scout); the notes stay the scout's own reading. Off with FLOW_SCOUT=0, and when both chains start on the same model (nothing to save)."""
-    if os.environ.get("FLOW_SCOUT", "1") != "1" or ctx.code_chain[:1] == ctx.chain[:1]:
+    if os.environ.get("FLOW_SCOUT", "1") != "1" or ctx.explorer_chain[:1] == ctx.chain[:1]:
         return {"status": "off"}
     with ctx.slock:
         cap = min(float(os.environ.get("FLOW_SCOUT_USD", "0.10")), ctx.free())
@@ -1000,7 +1001,7 @@ def scout_pass(ctx):
         return {"status": "not_run", "error": TOKEN_SPENT}
     wt, base = str(ctx.plan_wt), ctx.plan["base"]
     changed = git(wt, "diff", "--name-only", f"{base}..HEAD").stdout.splitlines()
-    res, cost, tok = agents.call(ctx.code_chain, method.scout_prompt(ctx.plan["goal"], (ctx.plan.get("analysis") or {}).get("spec", ""), changed), agents.Opts(wt, agents.READ_TOOLS, cap, 300), [])
+    res, cost, tok = agents.call(ctx.explorer_chain, method.scout_prompt(ctx.plan["goal"], (ctx.plan.get("analysis") or {}).get("spec", ""), changed), agents.Opts(wt, agents.READ_TOOLS, cap, 300), [])
     ctx.add_cost(cost, tok, role="scout", backend=res.backend)
     if not res.ok:
         return {"status": "not_run", "error": redact(res.error)[:200]}

@@ -469,7 +469,7 @@ def policy_chain(parent_model, role="code"):
     if re.search(r"gpt-?oss.*120b", m):
         return [f"agy:{parent_model}!"]
     if "gemini" in m and "flash" in m:
-        return [f"agy:{GPT_OSS}!"] if role == "code" else [f"agy:{parent_model}", "agy:gemini-3.8-flash-low"]
+        return [f"agy:{GPT_OSS}!"] if role in ("code", "explorer") else [f"agy:{parent_model}", "agy:gemini-3.8-flash-low"]
     return []
 
 
@@ -480,7 +480,11 @@ def require_model(parent_model):
 
 
 def chain_from_env(default=None, parent_model=None, role="code"):
-    """default None = FLOW_DEFAULT_BACKEND (config.toml models.default, a comma-separated chain), else claude:haiku."""
+    """default None = FLOW_DEFAULT_BACKEND (config.toml models.default, a comma-separated chain), else claude:haiku.
+    Per-role overrides win first: FLOW_CODE_BACKENDS (hands: map, steps), FLOW_EXPLORER_BACKENDS (scout)."""
+    role_env = {"code": "FLOW_CODE_BACKENDS", "explorer": "FLOW_EXPLORER_BACKENDS"}.get(role)
+    if role_env and os.environ.get(role_env):
+        return [s2.strip() for s2 in os.environ[role_env].split(",") if s2.strip()]
     if os.environ.get("FLOW_BACKENDS"):  # an explicit chain always wins
         return [s.strip() for s in os.environ["FLOW_BACKENDS"].split(",") if s.strip()]
     chain = policy_chain(parent_model or os.environ.get("FLOW_PARENT_MODEL"), role)
