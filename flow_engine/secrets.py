@@ -69,3 +69,8 @@ def agent_env(extra=None):
     if extra:
         env.update(extra)
     return env
+
+
+def no_secret_env():
+    """Environment for test code and acceptance commands: every name that matches SECRET_ENV is dropped, with no exception."""
+    return {k: v for k, v in os.environ.items() if not SECRET_ENV.search(k)}

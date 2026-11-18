@@ -5,6 +5,7 @@ the step worktree, /tmp, and claude's own config (~/.claude, ~/.claude.json). Ne
 Sub-agents get no environment variable whose name matches secrets.SECRET_ENV (see secrets.agent_env). bwrap also hides the
 secret directories and files listed in SECRET_DIRS and SECRET_FILES below, and the engine .env. Still visible: claude's own
 credentials under ~/.claude and ~/.claude.json, and the network.
+wrap(..., claude=False) hides ~/.claude and ~/.claude.json instead, for test code and acceptance commands that must not read them.
 Commit and tag signing is off inside the sandbox because the signing keys are hidden, and agents must not sign as the user.
 Without bwrap nothing stops a write; plan.py's escaping_paths post-check after each step is the only guard.
 agy is not wrapped: its own sandbox already mounts only /mnt/second_drive and /tmp. opencode is not wrapped either.
@@ -95,12 +96,27 @@ def _no_signing(wd):
     return ["--ro-bind", str(copy), str(src)]
 
 
-def wrap(argv, workdir):
-    """argv prefixed with bwrap: read-only /, read-write /tmp, the worktree and claude's config, secret paths hidden. Callers check available() first."""
+def _claude_hidden():
+    """bwrap flags that hide claude's config: an empty tmpfs over the directory, /dev/null over the file."""
+    out = []
+    for p in _claude_homes():
+        if p.is_dir():
+            out += ["--tmpfs", str(p)]
+        else:
+            out += ["--ro-bind", "/dev/null", str(p)]
+    return out
+
+
+def wrap(argv, workdir, claude=True):
+    """argv prefixed with bwrap: read-only /, read-write /tmp, the worktree and claude's config, secret paths hidden. Callers check available() first.
+    claude=False (test code, acceptance, bench accept.sh) hides claude's config instead of binding it."""
     wd = str(Path(workdir).resolve())
     cmd = ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--bind", "/tmp", "/tmp", "--bind", wd, wd]
-    for p in _claude_homes():
-        cmd += ["--bind", str(p), str(p)]
+    if claude:
+        for p in _claude_homes():
+            cmd += ["--bind", str(p), str(p)]
+    else:
+        cmd += _claude_hidden()
     cmd += _hidden(wd)
     cmd += _no_signing(wd)
     return cmd + ["--die-with-parent", "--"] + list(argv)
