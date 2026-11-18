@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- H0: gates and acceptance run without secrets and in bwrap (claude=False); tests gate timeout from FLOW_GATE_TESTS_TIMEOUT, timeouts reported as `timeout after N s`; accept and tests share FLOW_MAX_AGENTS slots; `bench run` refuses a foreign flow_engine; the three test files are tests/test_h0_*.py.
 - `config.toml` (`[models]`: `task`, `default`, `bench`, `backends`, `parent`) picks the models without env vars; see `config.toml.example`. `FLOW_DEFAULT_BACKEND` is the default chain for plans and the interview. `flow-task doctor` prints the models in effect.
 - `LICENSE` (MIT), `SECURITY.md`, `CHANGELOG.md` and `CONTRIBUTING.md`.
 - `tests/test_repo_files.py` checks that these files exist and carry their required content.

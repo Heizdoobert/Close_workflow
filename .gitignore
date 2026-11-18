@@ -18,3 +18,5 @@ last_session_result.json
 plans/
 vendor/
 config.toml
+harness/runs/
+harness/manifest/
