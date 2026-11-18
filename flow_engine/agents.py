@@ -156,6 +156,17 @@ def _slot():
         sem.release()
 
 
+@contextmanager
+def slot():
+    """Hold one FLOW_MAX_AGENTS slot, the same one an agent call takes.
+
+    Used by the tests gate and plan.accept, so they share FLOW_MAX_AGENTS with agents
+    instead of running several full suites at once.
+    """
+    with _slot():
+        yield
+
+
 def new_group():
     """Popen kwargs that put the child in its own process group, so a timeout can kill its children too."""
     if os.name == "nt":
