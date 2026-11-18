@@ -23,9 +23,9 @@ import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from flow_engine import agents, audit, bridge, claims, claims_llm, engine, gate, interview, journal, method
+from flow_engine import agents, audit, bridge, claims, claims_llm, engine, gate, interview, journal, method, sandbox
 # SECRET_PATTERNS and redact live in secrets.py; they stay importable from here
-from flow_engine.secrets import SECRET_ENV, SECRET_PATTERNS, redact, redact_obj, redact_shapes
+from flow_engine.secrets import SECRET_PATTERNS, no_secret_env, redact, redact_obj, redact_shapes
 
 ID = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 IDENT = ["-c", "user.name=flow-engine", "-c", "user.email=flow@localhost"]
@@ -597,14 +597,19 @@ def accept(step, wt):
         return {"cmd": "", "ok": True, "skipped": True}
     # output goes to files, not pipes: a grandchild that outlives the kill cannot keep us waiting on an open pipe
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
-        env = {k: v for k, v in os.environ.items() if not SECRET_ENV.search(k)}  # the planner wrote this command: it gets no API keys
+        env = no_secret_env()  # the planner wrote this command: it gets no API keys
         bash = None if os.name == "nt" else shutil.which("bash")  # pipefail: `pytest | tail` must fail when pytest does (sh/dash only reports the last stage)
-        p = subprocess.Popen(["bash", "-o", "pipefail", "-c", cmd] if bash else cmd, shell=not bash, cwd=wt, stdin=subprocess.DEVNULL, stdout=out, stderr=err, env=env, **_new_group())
-        try:
-            p.wait(timeout=int(os.environ.get("FLOW_ACCEPT_TIMEOUT", "300")))
-        except subprocess.TimeoutExpired:
-            _kill_group(p)
-            return {"cmd": cmd, "ok": False, "rc": None, "tail": "timeout"}
+        argv = ["bash", "-o", "pipefail", "-c", cmd] if bash else cmd
+        if bash and os.environ.get("FLOW_GATE_SANDBOX") != "0" and sandbox.available() == "bwrap":
+            argv = sandbox.wrap(argv, wt, claude=False)  # agent code runs read-only outside the worktree, without claude's credentials
+        timeout = int(os.environ.get("FLOW_ACCEPT_TIMEOUT", "300"))
+        with agents.slot():
+            p = subprocess.Popen(argv, shell=not bash, cwd=wt, stdin=subprocess.DEVNULL, stdout=out, stderr=err, env=env, **_new_group())
+            try:
+                p.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                _kill_group(p)
+                return {"cmd": cmd, "ok": False, "rc": None, "tail": f"timeout after {timeout} s", "timeout": True}
         tail = redact((_tail(out) + _tail(err)).strip())[-600:]
     return {"cmd": cmd, "ok": p.returncode == 0, "rc": p.returncode, "tail": tail}
 

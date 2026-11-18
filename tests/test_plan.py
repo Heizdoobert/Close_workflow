@@ -371,7 +371,7 @@ def test_acceptance_timeout_kills_the_hung_grandchild_too(tmp_path, monkeypatch)
     monkeypatch.setenv("FLOW_ACCEPT_TIMEOUT", "1")
     pidfile = tmp_path / "gc.pid"
     r = plan.accept({"acceptance": f"sleep 60 & echo $! > {pidfile}; wait"}, str(tmp_path))
-    assert r["ok"] is False and r["rc"] is None and r["tail"] == "timeout"
+    assert r["ok"] is False and r["rc"] is None and r["tail"] == "timeout after 1 s"
     assert _wait_dead(int(pidfile.read_text())), "a grandchild of a timed-out acceptance command survived"
 
 
@@ -380,7 +380,7 @@ def test_acceptance_grandchild_holding_output_does_not_block(tmp_path, monkeypat
     pidfile = tmp_path / "gc.pid"
     t0 = time.time()
     r = plan.accept({"acceptance": f"sleep 60 & echo $! > {pidfile}; sleep 60"}, str(tmp_path))
-    assert r["tail"] == "timeout" and time.time() - t0 < 15
+    assert r["tail"] == "timeout after 1 s" and time.time() - t0 < 15
     assert _wait_dead(int(pidfile.read_text()))
 
 
