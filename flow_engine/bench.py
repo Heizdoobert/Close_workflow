@@ -114,7 +114,7 @@ def run_task(task_dir, n):
                                      trace)
         _relative_events(events, repo)
         accept_path = str((task_dir / 'accept.sh').resolve())
-        argv = sandbox.wrap(['bash', accept_path], str(repo)) if sandbox.available() == 'bwrap' else ['bash', accept_path]
+        argv = sandbox.wrap(['bash', accept_path], str(repo), claude=False) if sandbox.available() == 'bwrap' and os.environ.get('FLOW_GATE_SANDBOX') != '0' else ['bash', accept_path]
         env = {'PATH': os.environ.get('PATH', ''), 'HOME': tmp, 'LANG': 'C.UTF-8'}
         try:
             p = subprocess.run(argv, cwd=str(repo), capture_output=True, text=True, timeout=300, env=env)
@@ -139,7 +139,21 @@ def _is_int(value):
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def _own_engine_mismatch():
+    own = Path.cwd() / 'flow_engine'
+    if not (own / '__init__.py').is_file():
+        return None
+    imported = Path(agents.__file__).resolve().parent
+    if own.resolve() == imported:
+        return None
+    return (f'bench run would measure the engine in {own.resolve()}, but this process imported {imported}; '
+            'run `python3.11 -m flow_engine bench run` from the repo root')
+
+
 def cmd_run(rest):
+    mismatch = _own_engine_mismatch()
+    if mismatch:
+        raise BenchError(mismatch)
     _require_sandbox()
     todo = tasks()
     n = next_run()
