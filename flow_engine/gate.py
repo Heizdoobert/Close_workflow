@@ -13,9 +13,9 @@ import subprocess
 import sys
 import tempfile
 
-from flow_engine import audit, bridge
+from flow_engine import audit, bridge, sandbox
 from flow_engine.audit import is_test_file  # noqa: F401  (re-exported: the constraints gate and the tests use gate.is_test_file)
-from flow_engine.secrets import redact, scan_line, secret_file_name
+from flow_engine.secrets import no_secret_env, redact, scan_line, secret_file_name
 
 
 def _run(root, cmd, **kw):
@@ -24,7 +24,7 @@ def _run(root, cmd, **kw):
     except OSError as e:  # tool missing
         return subprocess.CompletedProcess(cmd, 127, "", str(e))
     except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(cmd, 124, "", f"timeout after {kw.get('timeout')}s")
+        return subprocess.CompletedProcess(cmd, 124, "", f"timeout after {kw.get('timeout')} s")
 
 
 class GateError(RuntimeError):
@@ -197,9 +197,17 @@ def _run_gates(root, allowed):
     gates["syntax"] = {"ok": not bad, "files": bad}
 
     if _run(root, ["git", "ls-files", "test_*.py", "*_test.py", "tests/*"]).stdout.strip():
-        r = _run(root, [sys.executable, "-m", "pytest", "-q", "-x", "--no-header"], timeout=600)
+        from flow_engine import agents  # inside the function: agents imports sandbox and secrets, so a top-level import would cycle
+        timeout = int(os.environ.get("FLOW_GATE_TESTS_TIMEOUT", "1200"))
+        cmd = [sys.executable, "-m", "pytest", "-q", "-x", "--no-header"]
+        if shutil.which("bwrap") is not None and sandbox.available() == "bwrap" and os.environ.get("FLOW_GATE_SANDBOX") != "0":
+            cmd = sandbox.wrap(cmd, root, claude=False)
+        with agents.slot():
+            r = _run(root, cmd, timeout=timeout, env=no_secret_env())
         if "No module named pytest" in r.stderr + r.stdout:
             gates["tests"] = {"ok": True, "skipped": "pytest not installed"}
+        elif r.returncode == 124 and r.stderr.startswith("timeout after"):
+            gates["tests"] = {"ok": False, "timeout": True, "findings": [r.stderr.strip()]}
         else:
             gates["tests"] = {"ok": r.returncode == 0, "tail": r.stdout.strip().splitlines()[-1:]}
     else:
